@@ -1,0 +1,61 @@
+# Production on one server (docs/deploy.md): the app, Postgres and the backup helper. HTTPS comes
+# from the shared proxy in /opt/proxy (deploy/proxy), which reaches the app on the "web" network.
+# It lives in /opt/myloopland next to `.env` (a copy of deploy/secrets/app.env, which compose also
+# reads for the ${…} values below). Run it through the `myloopland` command (deploy/myloopland).
+name: myloopland
+
+services:
+  app:
+    # Built by GitHub Actions and loaded on the server by `myloopland deploy`; never pulled.
+    image: myloopland-app:current
+    pull_policy: never
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://myloopland:${POSTGRES_PASSWORD:?}@db:5432/myloopland
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default:
+      # Shared with the proxy and other sites' apps, so the name must be ours alone.
+      web:
+        aliases:
+          - myloopland-app
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myloopland
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: myloopland
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myloopland"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Waits; cron runs backup.sh in it every night, and setup runs restore.sh (docs/deploy.md).
+  backup:
+    build: ./backup
+    image: myloopland-backup:local
+    restart: unless-stopped
+    environment:
+      BACKUP_DATABASE_URL: postgres://myloopland:${POSTGRES_PASSWORD:?}@db:5432/myloopland
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  web:
+    external: true
+
+volumes:
+  db-data:

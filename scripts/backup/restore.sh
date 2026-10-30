@@ -1,0 +1,59 @@
+#!/bin/sh
+# Restores the newest backup from R2 into BACKUP_DATABASE_URL (docs/deploy.md).
+#   restore.sh              refuses if the database already has tables
+#   restore.sh --if-empty   does nothing if the database already has tables or the bucket is empty
+#                           (what `myloopland setup` runs on a new server)
+#   restore.sh --force      replaces what's there (the app must be stopped first)
+set -eu
+set -o pipefail
+
+: "${BACKUP_DATABASE_URL:?BACKUP_DATABASE_URL is not set}"
+mode="${1:-}"
+
+tables=$(psql "$BACKUP_DATABASE_URL" -tAc \
+  "select count(*) from information_schema.tables where table_schema = 'public'")
+if [ "$tables" != "0" ] && [ "$mode" != "--force" ]; then
+  if [ "$mode" = "--if-empty" ]; then
+    echo "restore: the database already has data, keeping it"
+    exit 0
+  fi
+  echo "restore: the database already has $tables tables; use --force to replace them" >&2
+  exit 1
+fi
+
+if [ "$mode" = "--if-empty" ] && [ -z "${R2_ACCOUNT_ID:-}" ]; then
+  echo "restore: R2 isn't set up, starting with an empty database"
+  exit 0
+fi
+. "$(dirname "$0")/r2.sh"
+
+# Names carry a sortable UTC time (myloopland-2026-10-13T0200Z.dump.gz), so the last one is the newest.
+# Short timeouts and one retry: a wrong account ID or bucket should fail in seconds, not minutes.
+RCLONE_FAST="--contimeout 10s --timeout 20s --retries 1 --low-level-retries 1"
+if ! listing=$(rclone lsf "r2:$R2_BUCKET/postgres/" --files-only --include "myloopland-*.dump.gz" $RCLONE_FAST 2>&1); then
+  echo "restore: couldn't read the R2 bucket \"$R2_BUCKET\": $(printf '%s' "$listing" | tail -n 3)" >&2
+  echo "restore: check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET in app.env" >&2
+  echo "restore: (to start without a backup, leave R2_ACCOUNT_ID empty and run setup again)" >&2
+  exit 1
+fi
+# The listing holds rclone's messages too (for the error above), so only real backup names count.
+latest=$(printf '%s\n' "$listing" |
+  { grep -E '^myloopland-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z\.dump\.gz$' || true; } | sort | tail -n 1)
+if [ -z "$latest" ]; then
+  if [ "$mode" = "--if-empty" ]; then
+    echo "restore: no backups in the bucket yet, starting with an empty database"
+    exit 0
+  fi
+  echo "restore: no backups in r2:$R2_BUCKET/postgres/" >&2
+  exit 1
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+rclone copyto "r2:$R2_BUCKET/postgres/$latest" "$work/$latest" $RCLONE_FAST
+gunzip -c "$work/$latest" > "$work/restore.dump"
+
+# --clean --if-exists: the dump creates the public schema, which a new database already has.
+pg_restore --clean --if-exists --no-owner --no-privileges --exit-on-error \
+  -d "$BACKUP_DATABASE_URL" "$work/restore.dump"
+echo "restore: restored $latest"

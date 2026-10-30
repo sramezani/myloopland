@@ -1,0 +1,5 @@
+# myloopland scheduled tasks, installed for the myloopland user by `myloopland setup` and every
+# deploy. Times are UTC. Output goes to the journal: `myloopland logs jobs`.
+# Claude's routines are scheduled in each user's own Claude, not here.
+0 2 * * * /usr/local/bin/myloopland backup 2>&1 | logger -t myloopland
+30 3 * * * /usr/local/bin/myloopland cleanup 2>&1 | logger -t myloopland

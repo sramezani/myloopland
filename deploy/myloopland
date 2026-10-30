@@ -1,0 +1,334 @@
+#!/usr/bin/env bash
+# myloopland on its server (docs/deploy.md). Installed as /usr/local/bin/myloopland.
+#
+#   myloopland status              containers and the app's health
+#   myloopland logs [service]      follow the logs (app, db, backup; "proxy" or "jobs" for cron)
+#   myloopland backup              back up the database to R2 now
+#   myloopland cleanup             delete expired sign-in sessions and Claude tokens (nightly)
+#   myloopland restore [--force]   restore the newest R2 backup (--force replaces existing data)
+#   myloopland stop | start        stop or start the app (the database keeps running)
+#
+# Used by the tools, not by hand:
+#   myloopland setup <dir>         prepare a fresh Ubuntu or Debian server (run by deploy/setup.sh)
+#   myloopland deploy              load a new release from stdin (run by GitHub Actions)
+set -euo pipefail
+
+# Everything of this site is named "myloopland", so other sites can share the server
+# (docs/deploy.md, "Several sites on one server"). Only /opt/proxy and the "web" network are shared.
+NAME=myloopland
+APP_DIR=/opt/$NAME
+DEPLOY_USER=$NAME
+IMAGE=$NAME-app
+PROXY_DIR=/opt/proxy
+SITE_FILE=$PROXY_DIR/etc/sites/$NAME.caddy
+
+say() { printf '\033[1m▸ %s\033[0m\n' "$*"; }
+die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+compose() { docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.yaml" "$@"; }
+has_image() { docker image inspect "$IMAGE:$1" >/dev/null 2>&1; }
+
+# Replaces a file by renaming a full copy over it, so a running copy of this script keeps its
+# old version. Folders are updated file by file and never swapped (a mounted folder would keep
+# pointing at the removed one).
+replace() {
+  local from=$1 to=$2 file
+  if [[ -d $from ]]; then
+    mkdir -p "$to"
+    for file in "$from"/*; do replace "$file" "$to/$(basename "$file")"; done
+  else
+    cp "$from" "$to.new"
+    mv -f "$to.new" "$to"
+  fi
+}
+
+# The files that come with every release: compose, Caddy, the backup helper, cron and this script.
+install_release_files() {
+  local src=$1
+  replace "$src/compose.yaml" "$APP_DIR/compose.yaml"
+  replace "$src/caddy" "$APP_DIR/caddy"
+  replace "$src/backup" "$APP_DIR/backup"
+  replace "$src/crontab" "$APP_DIR/crontab"
+  replace "$src/myloopland" "$APP_DIR/myloopland"
+  [[ -f $src/env.example ]] && replace "$src/env.example" "$APP_DIR/env.example"
+  chmod 755 "$APP_DIR/myloopland" "$APP_DIR"/backup/*.sh
+  if [[ $EUID -eq 0 ]]; then
+    chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
+    crontab -u "$DEPLOY_USER" "$APP_DIR/crontab"
+  else
+    crontab "$APP_DIR/crontab"
+  fi
+}
+
+proxy() { docker compose --project-directory "$PROXY_DIR" -f "$PROXY_DIR/compose.yaml" "$@"; }
+
+# Checks the proxy's whole config (every site's block) in a one-off Caddy container, without
+# touching the running proxy. Prints Caddy's own error when it fails.
+validate_proxy() {
+  local out
+  if ! out=$(docker run --rm -v "$PROXY_DIR/etc:/etc/caddy:ro" -v "$PROXY_DIR/certs:/certs:ro" \
+    caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
+    printf '%s\n' "$out" | tail -n 15 >&2
+    return 1
+  fi
+}
+
+# Makes the running proxy read its (already checked) config again. `docker exec` can fail with
+# "No such exec instance" (a Docker race), so after a few tries the proxy is restarted instead,
+# which takes about a second for every site on the server.
+reload_proxy() {
+  local try out=""
+  for try in 1 2 3; do
+    out=$(docker exec proxy-caddy caddy reload --config /etc/caddy/Caddyfile --force 2>&1) && return 0
+    sleep 2
+  done
+  say "The proxy didn't take a reload ($(printf '%s' "$out" | tail -n 1)); restarting it"
+  docker restart proxy-caddy >/dev/null
+}
+
+proxy_running() { [[ -n $(docker ps -q -f name='^proxy-caddy$') ]]; }
+
+# Our site block in the shared proxy, for APP_URL's host. It is checked before the proxy sees
+# it, and a block that doesn't pass is put back the way it was, so the other sites never notice.
+install_site() {
+  local domain
+  domain=$(sed -n 's#^APP_URL=https\{0,1\}://\([^/:]*\).*#\1#p' "$APP_DIR/.env" | tail -n 1)
+  [[ $domain =~ ^[a-z0-9.-]+$ ]] || die "APP_URL in $APP_DIR/.env has no usable domain"
+  rm -f "$SITE_FILE.previous"
+  [[ -f $SITE_FILE ]] && cp "$SITE_FILE" "$SITE_FILE.previous"
+  sed "s/SITE_DOMAIN/$domain/g" "$APP_DIR/caddy/site.caddy" > "$SITE_FILE.new"
+  mv -f "$SITE_FILE.new" "$SITE_FILE"
+  if ! validate_proxy; then
+    if [[ -f $SITE_FILE.previous ]]; then mv -f "$SITE_FILE.previous" "$SITE_FILE"; else rm -f "$SITE_FILE"; fi
+    die "the proxy's config didn't pass Caddy's check (above); the previous $SITE_FILE is back"
+  fi
+  rm -f "$SITE_FILE.previous"
+  if proxy_running; then reload_proxy; fi
+}
+
+# Waits until the app container reports healthy (its HEALTHCHECK calls /api/health).
+wait_healthy() {
+  local id state
+  for _ in $(seq 1 90); do
+    id=$(compose ps -q app)
+    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || echo missing)
+    [[ $state == healthy ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+cmd_setup() {
+  local src=${1:?usage: myloopland setup <dir>}
+  [[ $EUID -eq 0 ]] || die "setup needs root (sudo)"
+  # Read in a subshell: /etc/os-release sets NAME (and more), which would overwrite ours.
+  local os_id os_codename
+  # shellcheck disable=SC1091
+  os_id=$(. /etc/os-release && echo "$ID")
+  # shellcheck disable=SC1091
+  os_codename=$(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+  [[ $os_id == ubuntu || $os_id == debian ]] || die "setup supports Ubuntu and Debian, not $os_id"
+  # No questions from apt or from needrestart (Ubuntu) while updating.
+  export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+
+  say "Updating the system"
+  apt-get update -q
+  apt-get upgrade -yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+  apt-get install -yq ca-certificates curl ufw unattended-upgrades fail2ban
+  cat > /etc/apt/apt.conf.d/20auto-upgrades <<'CONF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+CONF
+  # Cron times in the crontab are UTC.
+  timedatectl set-timezone Etc/UTC 2>/dev/null || ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+
+  if [[ -z $(swapon --show --noheadings) ]]; then
+    say "Adding 2 GB of swap"
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  fi
+
+  if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+    say "Installing Docker"
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/$os_id/gpg" -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$os_id $os_codename stable" \
+      > /etc/apt/sources.list.d/docker.list
+    apt-get update -q
+    apt-get install -yq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  fi
+  if [[ ! -f /etc/docker/daemon.json ]]; then
+    # Docker's "local" log driver rotates container logs on its own.
+    echo '{ "log-driver": "local" }' > /etc/docker/daemon.json
+    systemctl restart docker
+  fi
+  systemctl enable --now docker >/dev/null
+
+  say "Creating the $DEPLOY_USER user (GitHub Actions deploys as it; other sites get their own)"
+  id "$DEPLOY_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+  usermod -aG docker "$DEPLOY_USER"
+  local home
+  home=$(getent passwd "$DEPLOY_USER" | cut -d: -f6)
+  install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$home/.ssh"
+  # This key can only run `myloopland deploy`: no shell, no forwarding.
+  printf 'restrict,command="/usr/local/bin/myloopland deploy" %s\n' "$(cat "$src/deploy-key.pub")" \
+    > "$home/.ssh/authorized_keys"
+  chown "$DEPLOY_USER:$DEPLOY_USER" "$home/.ssh/authorized_keys"
+  chmod 600 "$home/.ssh/authorized_keys"
+
+  say "Installing myloopland's files in $APP_DIR"
+  install -d -m 750 "$APP_DIR"
+  install -m 600 "$src/app.env" "$APP_DIR/.env"
+  install_release_files "$src"
+  ln -sf "$APP_DIR/myloopland" /usr/local/bin/myloopland
+
+  # The proxy and its network are shared: made once, and never overwritten by a later site.
+  say "Setting up the shared HTTPS proxy in $PROXY_DIR"
+  docker network inspect web >/dev/null 2>&1 || docker network create web >/dev/null
+  install -d -m 755 "$PROXY_DIR" "$PROXY_DIR/etc" "$PROXY_DIR/certs"
+  install -d -m 2775 -g docker "$PROXY_DIR/etc/sites"
+  [[ -f $PROXY_DIR/compose.yaml ]] || install -m 644 "$src/proxy/compose.yaml" "$PROXY_DIR/compose.yaml"
+  [[ -f $PROXY_DIR/etc/Caddyfile ]] || install -m 644 "$src/proxy/Caddyfile" "$PROXY_DIR/etc/Caddyfile"
+  # Left by an earlier version of this script, which named the folder after the OS by mistake.
+  if [[ -d $PROXY_DIR/certs/Ubuntu && $(stat -c %U "$PROXY_DIR/certs/Ubuntu") == "$DEPLOY_USER" ]]; then
+    rm -rf "$PROXY_DIR/certs/Ubuntu"
+  fi
+  install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$PROXY_DIR/certs/$NAME"
+  install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$src/origin.pem" "$PROXY_DIR/certs/$NAME/origin.pem"
+  install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$src/origin-key.pem" "$PROXY_DIR/certs/$NAME/origin-key.pem"
+
+  # SSH is open to the internet, so: keys only, and fail2ban blocks an IP for an hour after
+  # 5 failed logins. Passwords go off only when the admin who runs setup logs in with a key.
+  say "Locking down SSH (keys only, fail2ban)"
+  local admin_home
+  admin_home=$(getent passwd "${SUDO_USER:-root}" | cut -d: -f6)
+  if [[ -s $admin_home/.ssh/authorized_keys ]]; then
+    printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' \
+      > /etc/ssh/sshd_config.d/10-myloopland.conf
+    if sshd -t; then
+      systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+    else
+      rm -f /etc/ssh/sshd_config.d/10-myloopland.conf
+      say "sshd didn't accept the keys-only setting; left SSH as it was"
+    fi
+  else
+    say "No SSH key found for ${SUDO_USER:-root}: password login left as it was"
+  fi
+  cat > /etc/fail2ban/jail.d/myloopland.local <<'CONF'
+[sshd]
+enabled = true
+backend = systemd
+maxretry = 5
+findtime = 10m
+bantime = 1h
+CONF
+  systemctl enable --now fail2ban >/dev/null 2>&1 || true
+  systemctl restart fail2ban || say "fail2ban didn't start; check: sudo systemctl status fail2ban"
+
+  say "Turning on the firewall (SSH, 80 and 443)"
+  local port
+  for port in $(sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }'); do ufw allow "$port/tcp" >/dev/null; done
+  ufw allow 22/tcp >/dev/null
+  ufw allow 80/tcp >/dev/null
+  ufw allow 443/tcp >/dev/null
+  ufw --force enable >/dev/null
+
+  say "Starting Postgres, the backup helper and the proxy"
+  compose up -d --build --wait db backup
+  # A running proxy reloads in install_site (that also picks up a new certificate); a proxy
+  # that isn't running yet starts with the files already in place.
+  install_site
+  proxy up -d --wait
+  if has_image current; then
+    say "Starting the app"
+    compose up -d --wait app
+  fi
+  say "Server ready"
+  if [[ -f /var/run/reboot-required ]]; then
+    say "Some updates need a restart: run 'sudo reboot' when it suits you (everything starts again on its own)"
+  fi
+}
+
+cmd_deploy() {
+  local tag
+  RELEASE_DIR=$(mktemp -d "$APP_DIR/.release.XXXXXX")
+  trap 'rm -rf "$RELEASE_DIR"' EXIT
+  say "Receiving the release"
+  tar -xz -C "$RELEASE_DIR"
+  tag=$(cat "$RELEASE_DIR/IMAGE")
+  [[ $tag == "$IMAGE":* ]] || die "unexpected image name: $tag"
+
+  say "Loading $tag"
+  docker load -i "$RELEASE_DIR/app.tar" >/dev/null
+  install_release_files "$RELEASE_DIR"
+
+  # A variable added to .env.example that the server's .env doesn't have yet.
+  local key missing=""
+  [[ -f $APP_DIR/env.example ]] || touch "$APP_DIR/env.example"
+  for key in $(sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' "$APP_DIR/env.example"); do
+    case $key in DATABASE_URL | BACKUP_DATABASE_URL) continue ;; esac
+    grep -q "^$key=" "$APP_DIR/.env" || missing="$missing $key"
+  done
+  [[ -z $missing ]] || say "Not in the server's .env yet:$missing. Add them to deploy/secrets/app.env and run deploy/setup.sh (the app may not start without them)."
+
+  has_image current && docker tag "$IMAGE:current" "$IMAGE:previous"
+  docker tag "$tag" "$IMAGE:current"
+
+  say "Starting it (the app runs database migrations first)"
+  compose up -d --build --remove-orphans
+  if ! wait_healthy; then
+    # The repo is public, and so are its GitHub Actions logs: the app's own log stays on the server.
+    say "The app's log is on the server: sudo myloopland logs app"
+    if has_image previous; then
+      say "The new version isn't healthy: going back to the previous one"
+      docker tag "$IMAGE:previous" "$IMAGE:current"
+      compose up -d app
+    fi
+    die "deploy failed"
+  fi
+  install_site
+
+  # current and previous stay; the per-commit tags and unused layers go.
+  docker image ls "$IMAGE" --format '{{.Tag}}' | grep -vxE 'current|previous' \
+    | sed "s|^|$IMAGE:|" | xargs -r docker rmi >/dev/null || true
+  docker image prune -f >/dev/null
+  say "Deployed $tag"
+}
+
+cmd_restore() {
+  local mode=${1:-}
+  case $mode in
+    "" | --if-empty) compose exec -T backup restore.sh $mode ;;
+    --force)
+      compose stop app 2>/dev/null || true
+      compose exec -T backup restore.sh --force
+      has_image current && compose up -d app
+      ;;
+    *) die "usage: myloopland restore [--force]" ;;
+  esac
+}
+
+case ${1:-} in
+  setup) shift; cmd_setup "$@" ;;
+  deploy) cmd_deploy ;;
+  status)
+    compose ps
+    compose exec -T app wget -qO- http://127.0.0.1:3000/api/health && echo || die "the app isn't answering"
+    ;;
+  logs)
+    case ${2:-} in
+      jobs) journalctl -t myloopland -f -n 100 ;;
+      proxy) docker logs -f --tail=200 proxy-caddy ;;
+      *) compose logs -f --tail=200 ${2:+"$2"} ;;
+    esac
+    ;;
+  backup) compose exec -T backup backup.sh ;;
+  cleanup) compose exec -T backup cleanup.sh ;;
+  restore) cmd_restore "${2:-}" ;;
+  stop) compose stop app ;;
+  start) compose up -d --wait app ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

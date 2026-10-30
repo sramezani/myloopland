@@ -1,0 +1,41 @@
+# Local development and production-image testing (docs/deploy.md).
+#   docker compose up -d db                   Postgres for `npm run dev` (port 5433)
+#   docker compose --profile app up --build   the production image on http://localhost:3000
+# Production uses deploy/compose.yaml instead.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myloopland
+      POSTGRES_PASSWORD: myloopland
+      POSTGRES_DB: myloopland
+    ports:
+      # 5433, so it can run next to another local Postgres on 5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myloopland"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      args:
+        APP_URL: http://localhost:3000
+    env_file: .env
+    environment:
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgres://myloopland:myloopland@db:5432/myloopland
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["app"]
+
+volumes:
+  db-data:
