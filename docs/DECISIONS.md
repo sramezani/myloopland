@@ -56,6 +56,7 @@ Each technical decision and each dependency, with a one-line reason. Newest at t
 | Missed days are gaps in the line | Never invent: no reading means no point |
 | A line with no area fill, and no goal line | The axis doesn't start at 0, so a fill overstates growth; a far goal would flatten the line |
 | The chart is plain SVG measured with `ResizeObserver`, no chart library | One series and a crosshair don't need a dependency; lines and text stay crisp at any width |
+| The deploy workflow uses `docker/setup-qemu-action@v4`, `setup-buildx-action@v4` and `build-push-action@v7` | The older majors run on Node 20, which GitHub Actions deprecated (a warning on every deploy). The new ones run on Node 24, and what they removed isn't used here. SimpleDash got the same change |
 
 ## Dependencies
 
