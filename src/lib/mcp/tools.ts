@@ -80,7 +80,7 @@ export function registerTools(server: McpServer, userId: string) {
           .enum(ROUTINE_MODES)
           .default("chat")
           .describe(
-            "setup (first time), morning (drafts), evening (posts and numbers), weekly (review) or chat",
+            "setup (first time), daily (the scheduled morning run: numbers, the weekly review when due, drafts), morning (drafts only), evening (posts and numbers), weekly (review) or chat",
           ),
       }),
       annotations: READ,

@@ -33,7 +33,10 @@ type UserMenuProps = {
   deleteAccount: () => Promise<void>;
 };
 
-/** The account menu: connect Claude, change the X profile, privacy, sign out, delete account. */
+/**
+ * The account menu: your plan, connect Claude, change the X profile, privacy, sign out,
+ * delete account.
+ */
 export function UserMenu({
   name,
   email,
@@ -59,6 +62,11 @@ export function UserMenu({
             <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {handle ? (
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/plan">Your plan</Link>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem asChild>
             <Link href="/dashboard?connect=1#connect">Connect Claude</Link>
           </DropdownMenuItem>

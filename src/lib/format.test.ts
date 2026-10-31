@@ -10,6 +10,7 @@ import {
   formatMonthYear,
   formatSigned,
   formatTime,
+  formatWeekday,
 } from "./format";
 
 describe("format", () => {
@@ -27,6 +28,8 @@ describe("format", () => {
     expect(formatDayRange("2026-10-26", "2026-11-29")).toBe("26 Oct – 29 Nov");
     expect(formatDayRange("2026-12-28", "2027-01-03")).toBe("28 Dec 2026 – 3 Jan 2027");
     expect(formatMonthYear("2027-10-30")).toBe("Oct 2027");
+    expect(formatWeekday("mon")).toBe("Monday");
+    expect(formatWeekday("sun")).toBe("Sunday");
   });
 
   it("formats times in a time zone", () => {

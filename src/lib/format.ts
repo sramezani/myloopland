@@ -3,6 +3,8 @@
  * on screen goes through here. Trimmed from SimpleDash's src/lib/format.ts.
  */
 
+import { WEEKDAYS as WEEK, type Weekday } from "@/lib/dates";
+
 const LOCALE = "en-GB";
 
 const integer = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
@@ -34,6 +36,11 @@ function parts(isoDate: string) {
 function weekday(isoDate: string): string {
   const { y, m, d } = parts(isoDate);
   return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]!;
+}
+
+/** "mon" → "Monday": a weekday of the playbook (weeks start on Monday). */
+export function formatWeekday(day: Weekday): string {
+  return WEEKDAYS[(WEEK.indexOf(day) + 1) % 7]!;
 }
 
 /** "2026-10-04" → "4 Oct". Add the year with `withYear`. */

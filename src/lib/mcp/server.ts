@@ -12,6 +12,12 @@ const PROMPTS: { mode: Exclude<RoutineMode, "chat">; title: string; description:
     description: "First time: make the playbook your own.",
   },
   {
+    mode: "daily",
+    title: "Daily: numbers, review and drafts",
+    description:
+      "The one scheduled run each morning: yesterday's numbers, the weekly review when it's due, and today's drafts.",
+  },
+  {
     mode: "morning",
     title: "Morning: today's drafts",
     description: "Write today's drafts from your notes and the news.",

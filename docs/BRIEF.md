@@ -29,9 +29,9 @@ Siamak's requirements, from the planning session on 30 October 2026. This is the
 
 ## Decided in the planning chat (kept)
 
-- Drafts are written on the day itself, never weeks ahead. Future days show the planned topic only.
+- Drafts are written on the day itself by default, from that day's news and the user's notes. Future days show the planned topic only. A user who would rather schedule a week on X themselves can ask Claude to write the week ahead, except news and takes (changed 31 Oct 2026).
 - Never invent opinions, numbers or events. Never post or schedule anything on X: the user posts by hand.
 - The playbook lives in the database, versioned. The weekly review changes it only after the user approves, and logs the decision.
-- Numbers are read each evening from X's analytics Content page in the user's browser (`x.com/i/account_analytics/content`, posts and community, last 7 days). Nothing is downloaded each time; an export is only an optional one-time import of older posts.
+- Numbers are read each morning, by the one scheduled daily routine, from X's analytics Content page in the user's browser (`x.com/i/account_analytics/content`, posts and community, last 7 days). Setup reads the last 28 days there once. Nothing is ever downloaded or exported (changed 31 Oct 2026).
 - Replies are not tracked.
 - Sia's own plan (12 posts a week, his weekly rotation and topic mix) becomes his playbook in his setup chat with Claude. His `x-posts` skill keeps setting his voice.

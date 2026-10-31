@@ -59,7 +59,13 @@ One version, ordered in sprints. Tick a task with the date when it's done (`npm 
 ## S6. Real run
 
 - [ ] Add the connector on claude.ai and run setup (Sia's plan becomes his playbook v2)
-- [ ] Morning and evening routines by hand for 2 or 3 days, from the phone and the desktop app
+  - [x] From the first setup: setup reads 4 weeks of posts from the analytics page; no export, no profile scrolling (31 Oct 2026)
+  - [x] One daily routine (numbers, weekly review when due, drafts) as the only scheduled task; morning, evening and weekly kept (31 Oct 2026)
+  - [x] Read-only plan page, `/dashboard/plan`, linked from the calendar and the menu (31 Oct 2026)
+  - [x] Plan changes in plain words, "Claude's pick" topics and opt-in writing ahead in the chat routine (31 Oct 2026)
+  - [x] Scheduled tasks off the Connect card (31 Oct 2026)
+  - [x] Checked at 375 px and 1440 px, and with the keyboard, with sample data (31 Oct 2026)
+- [ ] The daily routine by hand for 2 or 3 days, from the phone and the desktop app
 - [ ] One weekly review with an approved and a skipped suggestion
-- [ ] Scheduled tasks for morning, evening and weekly
+- [ ] The daily scheduled task (one run each morning), from the desktop app
 - [ ] Tune the routine texts and tool descriptions from what was learned

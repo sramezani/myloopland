@@ -56,7 +56,7 @@ export function PostCard({
             <span>
               {m
                 ? `Numbers read ${formatAgo(new Date(m.capturedAt), now)}`
-                : "No numbers yet: Claude reads them in the evening routine."}
+                : "No numbers yet: Claude reads them in its daily routine."}
             </span>
             {item.xUrl ? (
               <a

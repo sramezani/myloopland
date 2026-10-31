@@ -69,7 +69,7 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     await deleteAccount(userId);
   });
 
-  it("introduces itself with instructions, 13 tools and 4 prompts", async () => {
+  it("introduces itself with instructions, 13 tools and 5 prompts", async () => {
     const init = await call("initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
@@ -93,9 +93,9 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       "update_profile",
     ]);
     const prompts = (await call("prompts/list")).result!.prompts as { name: string }[];
-    expect(prompts.map((p) => p.name)).toEqual(["setup", "morning", "evening", "weekly"]);
-    const evening = (await call("prompts/get", { name: "evening" })).result!;
-    expect(JSON.stringify(evening)).toContain("@siaramzee");
+    expect(prompts.map((p) => p.name)).toEqual(["setup", "daily", "morning", "evening", "weekly"]);
+    const daily = (await call("prompts/get", { name: "daily" })).result!;
+    expect(JSON.stringify(daily)).toContain("@siaramzee");
   });
 
   it("briefs Claude and takes drafts for today's slot", async () => {

@@ -50,31 +50,32 @@ Inputs are Zod-checked (texts up to 2,000 to 4,000 characters, lists up to 50 it
 
 ## Routines
 
-The steps live in `src/lib/mcp/routines.ts` and go out three ways: in the server `instructions` (short), as MCP prompts (`setup`, `morning`, `evening`, `weekly`; Claude Code shows them as `/myloopland:morning`), and inside `get_briefing(mode)`. So any Claude app follows them without a skill, and an improvement ships with the next deploy.
+The steps live in `src/lib/mcp/routines.ts` and go out three ways: in the server `instructions` (short), as MCP prompts (`setup`, `daily`, `morning`, `evening`, `weekly`; Claude Code shows them as `/myloopland:daily`), and inside `get_briefing(mode)`. So any Claude app follows them without a skill, and an improvement ships with the next deploy. The daily routine is built from the same step lists as the morning, evening and weekly ones, so they can't drift apart.
 
-- **setup:** reads the X profile if Claude can browse, asks at most 5 questions, proposes and saves the playbook, records followers, offers a one-time import of older posts (an export the user attaches) and the scheduled tasks.
-- **morning:** drafts for today's slots from notes, real events and the last 24 hours of news, each with a reason from past numbers. Asks instead of guessing.
-- **evening (needs a browser signed in to X):**
-  1. Reads `https://x.com/i/account_analytics/content?sort=date&dir=desc&days=7&type=posts`, then the same with `type=community`.
-  2. Records new posts and one snapshot for every row, plus followers.
-  3. Skips unposted slots.
-  4. Never downloads. If the page isn't available (it may need X Premium), it falls back to the profile or a screenshot.
-- **weekly:** `get_stats` for 4 weeks, 1 to 3 changes backed by numbers, `save_review`, asks the user, then `update_playbook` or `decide`.
-- **chat:** short commands such as "take 2: overhyped", "posted option 2" or "approve 1, skip 2".
+- **setup:**
+  1. If Claude can browse, it reads the bio and follower count at the top of the profile (no scrolling).
+  2. It reads the user's own posts of the last 4 weeks on the analytics Content page (`type=posts`, then `type=community`, `days=28`) and saves them with their numbers, so the first weekly review has data. Nothing is downloaded or exported. Without the analytics page (it may need X Premium), it reads about 20 posts on the profile instead.
+  3. It asks at most 5 questions, then proposes and saves the playbook and records followers.
+  4. It offers the one scheduled task (the daily routine), and tells the user where the plan is and how to change it.
+- **daily (the scheduled one):** one run each morning, in three parts.
+  1. **Numbers** (needs a browser signed in to X): reads `https://x.com/i/account_analytics/content?type=posts&sort=date&dir=desc&days=7`, then `type=community`, records new posts and one snapshot for every row, plus followers. Without a browser it skips this part and says so.
+  2. **Weekly review**, only when `last_review` is null or its period ended 7 or more days ago, and there are posts. It asks about the suggestions in its reply instead of waiting.
+  3. **Today's drafts**, as in the morning routine.
+- **morning:** drafts for today's slots from notes, real events and the last 24 hours of news, each with a reason from past numbers. Asks instead of guessing. A "Claude's pick" topic is chosen first; drafts written ahead are left as they are.
+- **evening (needs a browser signed in to X):** the daily routine's numbers part for today, then skips today's unposted slots. Never downloads. If the analytics page isn't available, it falls back to the profile or a screenshot.
+- **weekly:** `get_stats` for 4 weeks, 1 to 3 changes backed by numbers, `save_review`, asks the user, then `update_playbook` or `decide`. If the playbook's rules ask for drafts ahead, it then writes the next 7 days' drafts, except news and takes.
+- **chat:** short commands such as "take 2: overhyped", "posted option 2" or "approve 1, skip 2", plus plan changes in plain words: "change my plan: one post a day at 09:00", "you pick each day's topic" (topics become "Claude's pick") and "write my week ahead" (a playbook rule; the user schedules the drafts on X themselves).
 
 Voice: the user's own writing skill if they have one (Sia: `x-posts`), otherwise `playbook.voice`, learning from how they edit drafts.
 
-**Scheduled tasks** (set up in the user's Claude):
-- "Run my myloopland morning routine", around 07:30. It can run in the cloud.
-- "Run my myloopland evening routine", around 21:30. It runs on the user's computer, which must be awake with a browser signed in to X.
-- "Run my myloopland weekly routine", on Sunday.
+**The scheduled task** (set up in the user's Claude; setup offers it and `/dashboard/plan` shows it): "Run my myloopland daily routine", every morning around 07:30, before the first slot. It reads numbers, so it runs on the user's computer, which must be awake with a browser signed in to X; without one it still writes the drafts. Today's posts get their numbers the next morning. Anyone who wants them split can schedule the morning, evening and weekly routines instead.
 
 ## Testing
 
 - **Discovery:** `curl -i -X POST http://localhost:3000/mcp` gives a 401 with the `WWW-Authenticate` header. `curl http://localhost:3000/.well-known/oauth-protected-resource/mcp` and `curl http://localhost:3000/.well-known/oauth-authorization-server/api/auth` give the metadata.
 - **Tools without OAuth:** `src/lib/mcp/mcp.db.test.ts` drives the real handler (initialize, tools, prompts) against Postgres when `TEST_DATABASE_URL` is set.
 - **MCP Inspector (development):** `npx @modelcontextprotocol/inspector`, then connect to `http://localhost:3000/mcp` with OAuth. It registers itself, because dynamic registration is on in development.
-- **Claude Code:** add the local server as above and say "Run my myloopland morning routine".
+- **Claude Code:** add the local server as above and say "Run my myloopland daily routine".
 - **claude.ai** needs a public HTTPS address, so it waits for the deploy (or a temporary tunnel whose address is also `APP_URL` and a Google redirect URI).
 
 ## Things to know

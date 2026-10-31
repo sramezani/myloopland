@@ -2,6 +2,36 @@
 
 A dated log per session, newest first: what was done, what was learned, problems, what's next. Written for future Claude sessions.
 
+## 31 Oct 2026: after the first setup: analytics instead of scrolling, one daily routine, the plan page
+
+Siamak ran the setup on claude.ai and noticed six things. All six were agreed and built.
+
+**Done**
+
+- **Setup reads the analytics page.** Claude had scrolled the whole profile because setup step 2 told it to read "the last 20 or so posts"; it went past other people's posts and a safety filter blocked the results. Setup now reads the bio and followers from the top of the profile without scrolling, then the user's own posts of the last 4 weeks from the analytics Content page (`type=posts` and `type=community`, `days=28`), and saves them. The optional export step is gone. Falls back to about 20 posts on the profile without the analytics page.
+- **One scheduled task.** New `daily` mode and prompt: numbers (last 7 days on the analytics page), then the weekly review when the last review's period ended 7 or more days ago, then today's drafts. Morning, evening and weekly stay for anyone who wants them split. The routines are now built from shared step lists with `outline()` in `src/lib/mcp/routines.ts`, so they can't drift apart. The daily run doesn't skip yesterday's unposted slots: past days only show posts, and the stats don't use "skipped".
+- **The plan page.** `/dashboard/plan` (read-only, `src/components/plan/plan-view.tsx`): version, date and why it last changed; goal, about, voice; the week; pillars with shares; rules; notes; "Change it in Claude" with lines to copy, and the daily routine line. Linked from the calendar header and the menu. `AccountMenu` (`src/app/dashboard/account-menu.tsx`) now builds the menu for both pages.
+- **Plan changes in plain words** in the chat routine: "change my plan: …", "you pick each day's topic" (topics become "Claude's pick", chosen each morning) and "write my week ahead" (an opt-in playbook rule; the weekly review then drafts the next 7 days except news and takes, and the user schedules them on X themselves).
+- **The Connect card** no longer lists scheduled tasks; setup offers the one task and the plan page shows it. `Copyable` moved to `components/shared` and wraps between words.
+- `docs/BRIEF.md`: Siamak asked Claude to update the two kept decisions this changes (numbers read each morning; writing a week ahead as an option). Both lines are marked "changed 31 Oct 2026".
+- Tests: `routines.test.ts` (step numbering, setup uses 28 days with no export, daily order, instruction length), `formatWeekday`, and the MCP test now expects 5 prompts.
+- **Checked:** `npm run check` passes. With a throwaway local Postgres, all 90 tests pass, the database ones included. In the browser: the X profile form, then the dashboard and the plan page at 1440 px and 375 px (no sideways scroll), the menu and the plan link with the keyboard, and no console errors.
+
+**Learned**
+
+- The routine text decides what Claude does in the browser, word for word: "read the last 20 posts" became a full profile scroll. Point Claude at the most specific page there is.
+- On a brand-new test database, the two `*.db.test.ts` files can race to migrate it, and one fails the first run only. Every run after that passes.
+- A local Postgres without Docker: Homebrew's `initdb --locale=C`, then `pg_ctl -o "-p 5433 -k ''"`. Unix socket paths in the scratch folder are too long, so use TCP only.
+
+**Problems / not done**
+
+- Not yet tried with a real Claude: the daily routine and the new setup steps need a run on claude.ai or the desktop app (S6).
+
+**Next**
+
+1. Deploy, then run setup again on claude.ai and the daily routine by hand for 2 or 3 days; tune the texts.
+2. Set up the daily scheduled task in the desktop app.
+
 ## 30 Oct 2026: the domain (myloopland.com), and ready to open source
 
 **Done**

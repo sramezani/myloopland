@@ -18,6 +18,7 @@ myloopland: Next.js, one container
    ├─ /.well-known/*        OAuth discovery for MCP clients
    ├─ /consent              the user allows Claude to connect
    ├─ /dashboard            read-only calendar (server components)
+   ├─ /dashboard/plan       the active playbook, read-only
    └─ src/lib/*             one data layer, used by both MCP tools and pages
    ▼
 Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
@@ -33,8 +34,8 @@ Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
 | --- | --- |
 | `src/config/theme.ts` | Colours, radius, shadows, brand facts (plain data) |
 | `src/components/ui` | shadcn parts |
-| `src/components/shared` | Reusable blocks that take props and fetch nothing: `CardShell`, `CopyButton`, `StatusBadge`, `Metric`, `SegmentedLinks`, `RangeNav`, `Notice`, `EmptyState`, `Logo`, `GoogleButton`, `Container` |
-| `src/components/{account,calendar,onboarding}` | Feature components |
+| `src/components/shared` | Reusable blocks that take props and fetch nothing: `CardShell`, `CopyButton`, `Copyable`, `StatusBadge`, `Metric`, `SegmentedLinks`, `RangeNav`, `Notice`, `EmptyState`, `Logo`, `GoogleButton`, `Container` |
+| `src/components/{account,calendar,onboarding,plan}` | Feature components |
 | `src/lib` | Data access and helpers: `db`, `auth`, `playbook`, `calendar`, `posts`, `notes`, `reviews`, `stats`, `progress`, `profile`, `account`, `mcp`, `x`, `dates`, `format` |
 | `src/app` | Routes, pages and server actions |
 
@@ -64,6 +65,11 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
 **Playbook** (`src/lib/playbook/schema.ts`, Zod): `goal` (followers and a date, or null), `about`, `voice`, `pillars` (key, label, rough share), `week` (for each weekday, zero or more slots of time + topic + optional pillar and series), `rules`, `notes`. Times are "HH:MM", unique per day, sorted on save.
 
 **Default, v1** (`src/lib/playbook/default.ts`), saved when the X profile is first set: 2 slots every day (12:30 and 19:00) with a weekly topic each, 5 generic pillars, 6 rules (never invent, drafts on the day, one thought per post, at most one quote a day, respect off-limits topics, never post for the user). The setup routine makes it the user's own.
+
+**Seeing and changing it:** `/dashboard/plan` shows the active version read-only: why it last changed, goal, about, voice, the week's slots, pillars, rules and notes, and lines to say to Claude. Only Claude changes it (`update_playbook`), when the user asks in plain words. Two options need no schema change:
+
+- **"Claude's pick"** as a slot's topic: Claude chooses that day's topic from the news, the user's notes and what worked, keeping to the slot's pillar.
+- **Writing ahead:** a rule asking for drafts ahead makes the weekly review write the next 7 days' drafts, except news and takes, which are still written on the day. The user may schedule them on X themselves; myloopland and Claude never do.
 
 **What worked** (`src/lib/stats/summary.ts`, pure): posted posts grouped by pillar, series, time (by the hour), weekday or kind, with the median of views, averages of likes, replies, reposts and bookmarks, and totals of profile visits and new follows. Each uses the post's newest snapshot and skips unknown numbers. Also how often drafts were posted and edited, and the follower change over 7 and 30 days.
 
@@ -95,7 +101,8 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
   - `/`: landing.
   - `/signin`.
   - `/consent`.
-  - `/dashboard`: the X profile form until there is one, then the progress line, "Connect your Claude" until it is connected, and the calendar.
+  - `/dashboard`: the X profile form until there is one, then the progress line with a "Your plan" link, "Connect your Claude" until it is connected, and the calendar.
+  - `/dashboard/plan`: the active playbook, read-only (section 5). Also in the menu.
   - `/privacy`.
 - **The look** follows the "X growth dashboard" mockup: warm stone, orange accent (`#C2410C`), Inter. All values live in `src/config/theme.ts`. A test checks WCAG AA contrast for every pair listed there.
 - **Status words and chips** (`StatusBadge`):

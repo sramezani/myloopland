@@ -4,11 +4,11 @@ Grow your X account with your own Claude.
 
 **Use it at [myloopland.com](https://myloopland.com).** Free, and open source (MIT).
 
-Your Claude plans your week, drafts each day's posts, reads your numbers on X and reviews what worked. myloopland keeps all of it (the playbook, drafts, posts, numbers, notes, reviews and decisions) so every week gets a little better, and shows it on a simple calendar. You sign in with Google, type your X profile once, connect Claude, and post by hand.
+Your Claude plans your week, drafts each day's posts, reads your numbers on X and reviews what worked. myloopland keeps all of it (the playbook, drafts, posts, numbers, notes, reviews and decisions) so every week gets a little better, and shows it on a simple calendar, next to the plan itself. You sign in with Google, type your X profile once, connect Claude, and post by hand.
 
 - No X password, no X API: myloopland never posts for you.
 - One input in the app. Everything else happens in Claude, through the MCP connector at `https://myloopland.com/mcp` (`<APP_URL>/mcp` on your own copy).
-- Each user's own plan: the default is 2 posts a day, and Claude changes it with you.
+- Each user's own plan: the default is 2 posts a day, and Claude changes it with you. The dashboard shows it (read-only), and you can ask Claude to write a week ahead if you'd rather schedule posts on X yourself.
 
 ## How it works
 
@@ -18,7 +18,7 @@ Your Claude ──MCP (OAuth)──▶ myloopland /mcp ──▶ Postgres ◀─
      └── reads your posts and numbers on x.com in your browser
 ```
 
-The routines Claude follows (setup, morning, evening, weekly) come from the server, so there is nothing to install in Claude. See `docs/mcp.md`.
+The routines Claude follows come from the server, so there is nothing to install in Claude: setup once, then one scheduled daily routine each morning (yesterday's numbers, the weekly review when it's due, today's drafts). Morning, evening and weekly routines are there for anyone who wants them split. See `docs/mcp.md`.
 
 ## Run it locally
 

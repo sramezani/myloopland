@@ -67,7 +67,7 @@ deploy/setup.sh user@ip   # Siamak only: set up (or, with --from, move to) the p
 - **Components:** server components by default. Client components only for interaction: Copy, forms, the menu, sign-in and consent buttons.
 - **Theme tokens only:** `src/config/theme.ts` is the only place for colours. Use token classes such as `bg-primary` and `text-muted-foreground`. Never hex, `rgb()`, palette classes (`bg-blue-500`) or arbitrary colour classes. Lint and tests enforce this.
 - **Reuse first:** before writing a component, helper or util, look in CodeGraph, `src/components/ui`, `src/components/shared` and `src/lib`. Add shadcn parts with its CLI. Extend with a prop or a `cva` variant instead of copying.
-- **Layers:** `src/config` → `components/ui` → `components/shared` → feature folders (`account`, `calendar`, `onboarding`) → `src/app`. Each imports only from its own folder and the layers before it, and shared blocks never fetch data. ESLint enforces it.
+- **Layers:** `src/config` → `components/ui` → `components/shared` → feature folders (`account`, `calendar`, `onboarding`, `plan`) → `src/app`. Each imports only from its own folder and the layers before it, and shared blocks never fetch data. ESLint enforces it.
 - **UI quality:** mobile first; the user copies drafts from their phone. Check UI changes at 375 px and 1440 px and with the keyboard only.
 - **Tests:** next to the code (`*.test.ts`). Database tests are `*.db.test.ts` and need `TEST_DATABASE_URL` (an empty database they may write to).
 - **Docs:** plain words. Refer to a part of a doc as "section 6", never with symbols.
