@@ -15,7 +15,7 @@ The hosted myloopland runs at `https://myloopland.com`, and this page uses that 
 
 **2. Google sign-in.** Google Cloud → APIs & Services:
 
-- OAuth consent screen: app name myloopland, the support email, `https://myloopland.com` as the home page, `https://myloopland.com/privacy` as the privacy policy, and `myloopland.com` as an authorised domain. Scopes: only `openid`, `email` and `profile`. Set **Publishing status: In production**, so anyone can sign in. Basic scopes need no review.
+- OAuth consent screen: app name myloopland, the support email, `https://myloopland.com` as the home page, `https://myloopland.com/privacy` as the privacy policy, and `myloopland.com` as an authorised domain. A logo is optional (`public/logo-120.png`), but uploading one means Google checks the brand first, which takes a few days. Scopes: only `openid`, `email` and `profile`. Set **Publishing status: In production**, so anyone can sign in. Basic scopes need no review.
 - Credentials → Create OAuth client → Web application. Redirect URIs: `https://myloopland.com/api/auth/callback/google` (and `http://localhost:3000/api/auth/callback/google` for development).
 
 **3. R2 for backups (optional).** Cloudflare → R2: create a bucket, an API token with Object Read & Write for it, and a lifecycle rule that deletes objects after 30 days (the privacy page promises it). Put the four `R2_*` values in `deploy/secrets/app.env` when setup creates it. Without them there are no backups (setup warns).

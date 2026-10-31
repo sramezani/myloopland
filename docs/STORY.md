@@ -11,6 +11,7 @@ A dated log per session, newest first: what was done, what was learned, problems
 - Open source (MIT, Siamak's choice): `LICENSE`, `SECURITY.md` (private reports through GitHub, no email), `"license": "MIT"` in `package.json`, and README sections for the hosted site, running your own copy, contributing and the license.
 - Scanned every file that would be committed: no keys, tokens, emails or IP addresses; `.env`, `deploy/secrets/`, `.codegraph/` and `*.pem` are git-ignored. The deploy log already keeps the app's own log off the public GitHub Actions output.
 - Removed a local Mac path from `docs/BRIEF.md` (Siamak's OK, this once). Public-facing docs and comments no longer assume the reader knows SimpleDash; history in this file and `docs/DECISIONS.md` still names it.
+- Logo files in `public/`, all from the existing loop mark (no new design): `logo.svg` (the favicon), `logo-512.png`, `logo-120.png` (the size Google's consent screen wants), and `wordmark.svg` / `wordmark.png` (the mark and the name as `<Logo />` draws them, Inter SemiBold outlined so it doesn't need the font). Made with the satori and resvg copy bundled in `next/dist/compiled/@vercel/og`, so no new dependency. To change them, edit the mark and redraw; the colours are the theme's brand and foreground.
 - `npm run check` passes (76 tests).
 
 **Next**
