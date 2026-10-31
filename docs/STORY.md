@@ -14,8 +14,12 @@ Siamak ran the setup on claude.ai and noticed six things. All six were agreed an
 - **Plan changes in plain words** in the chat routine: "change my plan: …", "you pick each day's topic" (topics become "Claude's pick", chosen each morning) and "write my week ahead" (an opt-in playbook rule; the weekly review then drafts the next 7 days except news and takes, and the user schedules them on X themselves).
 - **The Connect card** no longer lists scheduled tasks; setup offers the one task and the plan page shows it. `Copyable` moved to `components/shared` and wraps between words.
 - `docs/BRIEF.md`: Siamak asked Claude to update the two kept decisions this changes (numbers read each morning; writing a week ahead as an option). Both lines are marked "changed 31 Oct 2026".
+- **Followers chart** (Siamak's question: "do we store daily followers?"). Yes: every count Claude reads is a row in `account_stat`. The dashboard now shows the last 90 days above the calendar once there are readings on two days.
+  - The data: `getFollowerHistory()` keeps the newest reading per local day, using `dailyFollowers()`, `consecutiveRuns()` and `niceTicks()` in `src/lib/progress/history.ts`, with tests.
+  - The chart (`FollowersChart`, a client component) is plain SVG at the measured width: a line with gaps for missed days, the newest count at the end, and a crosshair readout on hover, touch or arrow keys. `FollowersCard` adds the change since the first day and a "Show the numbers" table.
+  - No area fill (the axis doesn't start at 0) and no goal line (it would flatten the line). This was an idea for later in the 30 Oct entry.
 - Tests: `routines.test.ts` (step numbering, setup uses 28 days with no export, daily order, instruction length), `formatWeekday`, and the MCP test now expects 5 prompts.
-- **Checked:** `npm run check` passes. With a throwaway local Postgres, all 90 tests pass, the database ones included. In the browser: the X profile form, then the dashboard and the plan page at 1440 px and 375 px (no sideways scroll), the menu and the plan link with the keyboard, and no console errors.
+- **Checked:** `npm run check` passes. With a throwaway local Postgres, all 94 tests pass, the database ones included. The chart was checked with four days' readings removed (gaps and a lone point), at both widths, by hover and by keyboard. In the browser: the X profile form, then the dashboard and the plan page at 1440 px and 375 px (no sideways scroll), the menu and the plan link with the keyboard, and no console errors.
 
 **Learned**
 

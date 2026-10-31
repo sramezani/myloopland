@@ -52,6 +52,10 @@ Each technical decision and each dependency, with a one-line reason. Newest at t
 | Writing a week ahead is an opt-in playbook rule (Siamak, changes the brief's "drafts on the day") | For users who'd rather schedule a week on X themselves. News and takes are still written on the day, and myloopland and Claude still never schedule |
 | The scheduled task lives in setup and on the plan page, not on the Connect card | The first screen has one job, and Claude offers the task when it knows the user's times |
 | `Copyable` moved to `components/shared`, wrapping between words (`wrap-anywhere`) | The Connect card and the plan page both use it; sentences no longer break mid-word |
+| A followers chart on the dashboard (Siamak): 90 days, one point per local day, from `account_stat` | The counts were already kept; the progress line only showed the latest and the change |
+| Missed days are gaps in the line | Never invent: no reading means no point |
+| A line with no area fill, and no goal line | The axis doesn't start at 0, so a fill overstates growth; a far goal would flatten the line |
+| The chart is plain SVG measured with `ResizeObserver`, no chart library | One series and a crosshair don't need a dependency; lines and text stay crisp at any width |
 
 ## Dependencies
 

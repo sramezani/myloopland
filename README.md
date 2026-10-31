@@ -4,7 +4,7 @@ Grow your X account with your own Claude.
 
 **Use it at [myloopland.com](https://myloopland.com).** Free, and open source (MIT).
 
-Your Claude plans your week, drafts each day's posts, reads your numbers on X and reviews what worked. myloopland keeps all of it (the playbook, drafts, posts, numbers, notes, reviews and decisions) so every week gets a little better, and shows it on a simple calendar, next to the plan itself. You sign in with Google, type your X profile once, connect Claude, and post by hand.
+Your Claude plans your week, drafts each day's posts, reads your numbers on X and reviews what worked. myloopland keeps all of it (the playbook, drafts, posts, numbers, notes, reviews and decisions) so every week gets a little better, and shows it on a simple calendar, next to the plan itself and a chart of your followers. You sign in with Google, type your X profile once, connect Claude, and post by hand.
 
 - No X password, no X API: myloopland never posts for you.
 - One input in the app. Everything else happens in Claude, through the MCP connector at `https://myloopland.com/mcp` (`<APP_URL>/mcp` on your own copy).

@@ -42,6 +42,7 @@ One version, ordered in sprints. Tick a task with the date when it's done (`npm 
 - [x] 30 days, week and day views, slot and post cards, drafts with Copy and Open in X (30 Oct 2026)
 - [x] Progress line, Connect Claude card, empty states (30 Oct 2026)
 - [x] Checked at 375 px and desktop width with sample data (30 Oct 2026)
+- [x] Followers chart: 90 days, gaps for missed days, hover and keyboard readout, table view; checked at 375 px and 1440 px (31 Oct 2026)
 - [ ] Keyboard-only pass on a real device
 
 ## S5. Deploy

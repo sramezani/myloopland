@@ -101,7 +101,7 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
   - `/`: landing.
   - `/signin`.
   - `/consent`.
-  - `/dashboard`: the X profile form until there is one, then the progress line with a "Your plan" link, "Connect your Claude" until it is connected, and the calendar.
+  - `/dashboard`: the X profile form until there is one, then the progress line with a "Your plan" link, "Connect your Claude" until it is connected, the followers chart (once there are readings on two days), and the calendar.
   - `/dashboard/plan`: the active playbook, read-only (section 5). Also in the menu.
   - `/privacy`.
 - **The look** follows the "X growth dashboard" mockup: warm stone, orange accent (`#C2410C`), Inter. All values live in `src/config/theme.ts`. A test checks WCAG AA contrast for every pair listed there.
@@ -116,6 +116,11 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
   - Week: 7 columns from 1024 px, stacked below that.
   - Day: full cards, posts with every number and slots with their drafts.
 - **Each draft** has Copy and Open in X (`x.com/intent/post?text=…`).
+- **Followers chart** (`FollowersCard`, `FollowersChart`; data from `getFollowerHistory()` and `src/lib/progress/history.ts`): the last 90 days from `account_stat`, one point per local day (the day's newest reading).
+  - A day without a reading is a gap in the line, never filled in.
+  - The axis is tight around the counts (round steps), so there is a line and no area fill, which would overstate growth. No goal line either: a goal far above would flatten the line, and the progress line already names it.
+  - The newest count is labelled at the end. Hover, touch or the arrow keys show a day's count under a crosshair, and "Show the numbers" opens the same data as a table.
+  - Plain SVG drawn at the card's measured width, in theme tokens.
 - **Unknown numbers** show "—".
 
 ## 9. Security and operations

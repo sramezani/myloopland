@@ -5,6 +5,7 @@ import { AccountMenu } from "@/app/dashboard/account-menu";
 import { TopBar } from "@/components/account/top-bar";
 import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { DayView } from "@/components/calendar/day-view";
+import { FollowersCard } from "@/components/calendar/followers-card";
 import { MonthGrid } from "@/components/calendar/month-grid";
 import { ProgressLine } from "@/components/calendar/progress-line";
 import { WeekColumns } from "@/components/calendar/week-columns";
@@ -21,7 +22,7 @@ import { parseAnchor, parseView, rangeFor } from "@/lib/calendar/range";
 import { todayIn } from "@/lib/dates";
 import { env } from "@/lib/env";
 import { getProfile } from "@/lib/profile/profile";
-import { getProgress } from "@/lib/progress/progress";
+import { getFollowerHistory, getProgress } from "@/lib/progress/progress";
 
 export const metadata: Metadata = {
   title: "Your X calendar",
@@ -31,7 +32,7 @@ export const metadata: Metadata = {
 /**
  * The dashboard (docs/SPEC.md section 8): read-only. The X profile form until there is one,
  * then the progress line with a link to the plan, how to connect Claude (until it is
- * connected), and the calendar.
+ * connected), followers over 90 days (from two days of readings), and the calendar.
  */
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();
@@ -69,10 +70,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const now = new Date();
   const today = todayIn(timeZone, now);
   const range = rangeFor(parseView(params.view), parseAnchor(params.date, today));
-  const [{ days }, progress, connected] = await Promise.all([
+  const [{ days }, progress, connected, followers] = await Promise.all([
     getCalendar(user.id, timeZone, range.from, range.to, now),
     getProgress(user.id, timeZone, now),
     isClaudeConnected(user.id),
+    getFollowerHistory(user.id, timeZone, 90, now),
   ]);
 
   return (
@@ -92,6 +94,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
           {!connected || params.connect === "1" ? (
             <ConnectClaude mcpUrl={mcpResourceUrl(env.APP_URL)} connected={connected} />
           ) : null}
+          {followers.length >= 2 ? <FollowersCard days={followers} /> : null}
           <CalendarToolbar range={range} today={today} />
           {range.view === "month" ? (
             <MonthGrid days={days} />
