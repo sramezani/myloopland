@@ -2,6 +2,101 @@
 
 A dated log per session, newest first: what was done, what was learned, problems, what's next. Written for future Claude sessions.
 
+## 6 Nov 2026: one backlinks list per website
+
+Siamak pointed out that backlinks belong to a domain, so the list should be per website: a dropdown at the top shows the open website, the first visit asks for a website instead of showing every place, and "Add website" at the end of the dropdown opens a small dialog. No removing for now.
+
+**Done**
+
+- **Data:**
+  - New `website` table (url, `url_key`, unique per user); `backlink` gets `website_id`, unique per website.
+  - `addWebsite` cleans what was typed (`https://` added when missing, no query or trailing slash; a GitHub repo counts as a website). It copies the 40 starter places in, in one transaction. Re-adding a website just opens it. The limit is 20.
+  - Lazy seeding on first read is gone. `listBacklinks` and `saveBacklinks` take the website id.
+  - The `0001_backlinks` migration was regenerated rather than followed by a 0002, since it had only ever run on throwaway databases.
+- **MCP:**
+  - `get_backlinks(website?)` and `save_backlinks(website?, …)`. With one website it's used without asking. With several and none named, the error lists them so Claude asks. With none, the error says to add one on the page.
+  - `get_backlinks` now returns `website` and `websites` instead of the playbook's `about`; the routine says to open the website to learn what it is.
+  - The routine, the chat line ("I submitted simpledash.com to SaaSHub"), the server instructions and the prompt text say "website".
+- **Page:**
+  - `?site=simpledash.com` picks the website; without it, the first one added opens.
+  - The header is now its own block (`BacklinksHeader`): title, the picker (`WebsitePicker`: websites as links with a tick on the open one, then "Add website" opening a `Dialog`) and "Find more with Claude" (hidden on phones, where the card is a short scroll away).
+  - `BacklinkList` is keyed by website, so the filter and search reset when switching.
+  - `FindMore` lines name the website.
+- **Reuse:** `OneFieldForm` (components/shared) now holds the one-field form. The X profile form and the new `WebsiteForm` both use it. That also fixed a duplicate id: the X profile card and its input were both `x-profile`.
+- **Docs:** SPEC sections 1, 2, 4, 8 and 12, DECISIONS ("Backlinks per website"), mcp.md, README, CLAUDE.md principle 1, privacy page, delete-account text.
+- `npm run check` passes (109 tests with a test database). Checked in the browser:
+  - the first-run card, the error for "not a website", adding a site, and adding a GitHub repo from the dialog;
+  - switching sites with the mouse and the keyboard, and ticks staying separate per website;
+  - re-adding an existing site;
+  - 375 px with no sideways scroll and the long address truncated, and 1440 px.
+
+**Learned**
+
+- The shared `Button` has `shrink-0` built in. In a row that must fit a phone, add `shrink` (and `min-w-0`) or a long label pushes the page sideways.
+- A server action's revalidation can unmount the form before its effect runs. On the first-run card the page simply re-renders with the new website (the URL has no `?site`); in the dialog the effect runs and opens the new website's address.
+
+**Problems / not done**
+
+- Nothing deployed or committed; Siamak handles git.
+- The open website isn't remembered: going to Calendar and back opens the first website. Fine with one or two websites.
+
+**Ideas (not built)**
+
+- Remember the last website opened (a cookie), if switching gets annoying.
+- Removing or renaming a website.
+- Per-website counts in the menu ("12/40").
+
+**Next**
+
+- After the deploy: in Claude, "find new backlink places for simpledash.com", then tune `BACKLINK_ROUTINE`.
+
+## 5 Nov 2026: the backlinks list
+
+Siamak wanted to submit SimpleDash to launch sites and directories for backlinks, and asked whether that belongs in myloopland. We talked it through first: it's outside the brief, and directory submission is mostly a one-off batch per product. The part that keeps repeating is outreach, which works like cold email. He chose to build it anyway, for his own products and for anyone else who wants it: a Backlinks tab with a checkbox on each place, and a way for Claude to find and add new ones.
+
+**Done**
+
+- **Spec first:** section 12 of `docs/SPEC.md`, plus the top bar, data model, layers and pages. Decisions are logged, including the change to the brief's "one input" and principle 1 in `CLAUDE.md`.
+- **Table `backlink`** (`drizzle/0001_backlinks.sql`): name, url, `url_key` (unique per user), category (launch, directory, community), cost, note, `link_type` (null when unknown), position, `added_by` (starter or claude), `submitted_at`.
+- **Starter list** (`src/lib/backlinks/starter.ts`): 40 places from Siamak's research, with notes that suit any product. Every address was checked with curl: BetaPage now redirects to Pitchwall, and PeerPush moved to .com. r/GoogleAnalytics and r/analytics were left out because they only fit analytics tools; Claude should add them for SimpleDash. The list is copied in on the first read (`listBacklinks`), so existing users get it too.
+- **Data layer** (`src/lib/backlinks/`): `listBacklinks`, `setBacklinkSubmitted` (ticking again keeps the first date), `saveBacklinks` (add, update by id, skip places already listed), `urlKey` and `displayUrl`, plus pure helpers (`countBacklinks`, `isNewPlace`, `matchesSearch`).
+- **MCP:** `get_backlinks` (list, counts, playbook `about`, steps) and `save_backlinks`; `BACKLINK_ROUTINE` and the `backlinks` prompt ("Find new backlink places"); a chat line for "I submitted to SaaSHub"; a sentence and a "never submit or sign up" rule in the server instructions. 15 tools and 6 prompts now.
+- **UI:**
+  - The top bar has tabs (Calendar, Backlinks), with an underline for the current one, on their own row below 640 px. There are no tabs before the X profile is added.
+  - `/dashboard/backlinks`: a progress card (overall and per category), a filter (All, To do, Submitted, and New when Claude added places in the last 14 days), and search with a `/` shortcut and Escape to clear.
+  - One card per category. Each row has a checkbox (44 px target), the name linking out, the address, the note, and cost, link type and "Submitted 5 Nov" chips.
+  - Ticks are instant (`useOptimistic`), announced to screen readers, and roll back with a toast pinned to the bottom if saving fails. A row ticked under a filter stays in view until the filter changes.
+  - A "Find more with Claude" card has lines to copy.
+- shadcn `checkbox`, added with the CLI. Privacy page and delete dialog mention the list.
+- Tests: `backlinks.test.ts` (keys, starter list, counts, new, search); database tests for seeding once (two reads at once), ticks, duplicates, other users' ids and delete; MCP tests for both tools, the input checks and the new prompt.
+- **Checked:**
+  - `npm run check` passes, all 107 tests pass with `TEST_DATABASE_URL`, and `next build` compiles.
+  - In the browser with a local session: onboarding (no tabs), then the calendar and backlinks at 1440 px and 375 px (no sideways scroll).
+  - Ticking saves to the database. Filter, New and search work, and so does the no-match state. The keyboard works (Space ticks, the focus ring shows, `/` focuses search).
+  - A failed save (row deleted underneath) rolls back with the toast.
+
+**Learned**
+
+- The shadcn CLI (4.23) wrote `import { cn } from "cn"` into the checkbox and added a `cn` npm package. Fix the import to `@/lib/utils` and restore `package.json` and the lockfile after `shadcn add`.
+- A local Postgres from Homebrew on macOS needs `LC_ALL=C` when starting (`pg_ctl`), or it stops with "postmaster became multithreaded during startup".
+- The in-app browser pane's screenshots lag a step when the pane is hidden, and typing there only inserts text (no key events). Check state with JavaScript instead.
+- The first run of the database tests on a brand-new database still races once (as on 31 Oct); the second run passes.
+
+**Problems / not done**
+
+- Not tried with a real Claude yet (`find new backlink places`): needs the deploy, or local Google sign-in for OAuth.
+- One list per account: ticks aren't per product. Fine for now; a product field is the change if it's needed.
+
+**Ideas (not built)**
+
+- A "live" state with the listing's address, to check later that the link is still up.
+- A product on each tick, once there's a second product to launch.
+
+**Next**
+
+1. Deploy, then ask Claude to "find new backlink places for SimpleDash" and check what it adds.
+2. Then the S6 items: the daily routine by hand, and the scheduled task.
+
 ## 31 Oct 2026: after the first setup: analytics instead of scrolling, one daily routine, the plan page
 
 Siamak ran the setup on claude.ai and noticed six things. All six were agreed and built.

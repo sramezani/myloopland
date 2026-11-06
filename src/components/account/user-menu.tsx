@@ -103,8 +103,8 @@ export function UserMenu({
           <DialogHeader>
             <DialogTitle>Delete your account?</DialogTitle>
             <DialogDescription>
-              This removes your plan, drafts, posts, numbers, notes and reviews for good, and
-              disconnects Claude. It can&apos;t be undone.
+              This removes your plan, drafts, posts, numbers, notes, reviews, websites and backlinks
+              lists for good, and disconnects Claude. It can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -1,8 +1,10 @@
 import "server-only";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { findWebsite, listBacklinks, listWebsites, saveBacklinks } from "@/lib/backlinks/backlinks";
+import { countBacklinks } from "@/lib/backlinks/summary";
 import { getCalendar } from "@/lib/calendar/queries";
-import { NOTE_KINDS, POST_KINDS } from "@/lib/db/schema";
+import { BACKLINK_CATEGORIES, LINK_TYPES, NOTE_KINDS, POST_KINDS } from "@/lib/db/schema";
 import { addDays, daysBetween, isClockTime, isIsoDay, isTimeZone, todayIn } from "@/lib/dates";
 import { UserFacingError } from "@/lib/errors";
 import { listNotes, saveNote } from "@/lib/notes/notes";
@@ -16,7 +18,7 @@ import { getStats } from "@/lib/stats/stats";
 import { STAT_DIMENSIONS } from "@/lib/stats/summary";
 import { parseXHandle } from "@/lib/x/x";
 import { getBriefing, itemForClaude } from "./briefing";
-import { ROUTINE_MODES } from "./routines";
+import { BACKLINK_ROUTINE, ROUTINE_MODES } from "./routines";
 
 /**
  * The MCP tools (docs/mcp.md). Every tool works on one user only: the one whose token came
@@ -35,6 +37,47 @@ const dateTime = z
 const id = z.string().min(1).max(100);
 const words = (max: number) => z.string().trim().min(1).max(max);
 const count = z.number().int().min(0).max(100_000_000_000).nullable().optional();
+const webUrl = z
+  .string()
+  .url()
+  .max(500)
+  .refine((v) => /^https?:\/\//i.test(v), "Use a web address starting with https://");
+const websiteName = z
+  .string()
+  .trim()
+  .max(300)
+  .optional()
+  .describe(
+    "Which of the user's websites, eg simpledash.com. Needed when they have more than one.",
+  );
+const placeFields = {
+  name: words(120),
+  url: webUrl.describe("The page to submit on, or the site's home page"),
+  category: z
+    .enum(BACKLINK_CATEGORIES)
+    .describe(
+      "launch (one launch day or week), directory (a listing that lasts) or community (a post)",
+    ),
+  cost: z
+    .string()
+    .trim()
+    .max(80)
+    .nullable()
+    .optional()
+    .describe('As the site says it: "Free", "Free + paid", "Paid from $19"'),
+  note: z
+    .string()
+    .trim()
+    .max(300)
+    .nullable()
+    .optional()
+    .describe("The catch, in one line: rules, waiting time, a badge, upvotes needed"),
+  link_type: z
+    .enum(LINK_TYPES)
+    .nullable()
+    .optional()
+    .describe("Only when the site says whether its links are followed"),
+};
 
 const READ = { readOnlyHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: false } as const;
@@ -427,5 +470,86 @@ export function registerTools(server: McpServer, userId: string) {
       annotations: { ...WRITE, idempotentHint: true },
     },
     ({ decision_id, status, note }) => run(() => decide(userId, decision_id, status, note)),
+  );
+
+  server.registerTool(
+    "get_backlinks",
+    {
+      title: "Get backlinks",
+      description:
+        "One of the user's websites and its list of places to submit it to, for links back: launch sites, directories and communities, each with its cost, note, link type (null when unknown) and whether the user submitted it. Also all the user's websites, how many places are submitted, and the steps for finding new places.",
+      inputSchema: z.object({ website: websiteName }),
+      annotations: READ,
+    },
+    ({ website }) =>
+      run(async () => {
+        const [{ timeZone }, site, sites] = await Promise.all([
+          me(),
+          findWebsite(userId, website),
+          listWebsites(userId),
+        ]);
+        const places = await listBacklinks(userId, site.id);
+        const counts = countBacklinks(places);
+        const localDay = (iso: string) => todayIn(timeZone, new Date(iso));
+        return {
+          website: site.url,
+          websites: sites.map((each) => each.url),
+          total: counts.total,
+          submitted: counts.submitted,
+          places: places.map((p) => ({
+            id: p.id,
+            name: p.name,
+            url: p.url,
+            category: p.category,
+            cost: p.cost,
+            note: p.note,
+            link_type: p.linkType,
+            submitted: p.submittedAt !== null,
+            submitted_on: p.submittedAt ? localDay(p.submittedAt) : null,
+            added_by: p.addedBy,
+            added_on: localDay(p.createdAt),
+          })),
+          steps: BACKLINK_ROUTINE,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "save_backlinks",
+    {
+      title: "Save backlinks",
+      description:
+        "Adds new places to one website's backlink list (at the end) and changes its listed ones by id: name, address, category, cost, note, link type, or submitted (true when the user says they submitted it, false to undo). A new place whose address is already listed is skipped and named in the answer. Never submit to a site for the user.",
+      inputSchema: z.object({
+        website: websiteName,
+        add: z.array(z.object(placeFields)).max(20).default([]),
+        update: z
+          .array(
+            z.object({
+              id,
+              ...placeFields,
+              name: placeFields.name.optional(),
+              url: placeFields.url.optional(),
+              category: placeFields.category.optional(),
+              submitted: z.boolean().optional(),
+            }),
+          )
+          .max(20)
+          .default([]),
+      }),
+      annotations: WRITE,
+    },
+    ({ website, add, update }) =>
+      run(async () => {
+        if (add.length === 0 && update.length === 0) {
+          throw new UserFacingError("Send at least one place to add or update.");
+        }
+        const site = await findWebsite(userId, website);
+        const saved = await saveBacklinks(userId, site.id, {
+          add: add.map((p) => ({ ...p, linkType: p.link_type })),
+          update: update.map((p) => ({ ...p, linkType: p.link_type })),
+        });
+        return { website: site.url, ...saved };
+      }),
   );
 }

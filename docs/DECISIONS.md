@@ -58,6 +58,41 @@ Each technical decision and each dependency, with a one-line reason. Newest at t
 | The chart is plain SVG measured with `ResizeObserver`, no chart library | One series and a crosshair don't need a dependency; lines and text stay crisp at any width |
 | The deploy workflow uses `docker/setup-qemu-action@v4`, `setup-buildx-action@v4` and `build-push-action@v7` | The older majors run on Node 20, which GitHub Actions deprecated (a warning on every deploy). The new ones run on Node 24, and what they removed isn't used here. SimpleDash got the same change |
 
+## Backlinks (5 Nov 2026)
+
+| Decision | Why |
+| --- | --- |
+| A backlinks list in myloopland, as its own tab (Siamak, beyond the brief) | Submitting products for links is repeat work Claude can help with, and the list keeps track across sessions |
+| The tick on each place is the app's second input (Siamak, changes the brief's "one input") | Ticking is quicker on the page than in a chat; Claude can still tick one when told |
+| One list per account, not per product (changed on 6 Nov: one per website, below) | Simple first; products can come later if needed |
+| One row per address (`url_key`: no scheme, `www.`, query, hash or trailing slash), unique per user (per website since 6 Nov) | Claude can't add the same place twice, and different pages of one site (subreddits) stay apart |
+| The starter list is copied in on the first read, not at sign-up or in a migration (changed on 6 Nov: when a website is added) | Works for existing and new users alike, with no backfill; a unique index makes two first reads at once safe |
+| Starter notes suit any product; field-specific places are left to Claude | The app is for anyone; Claude searches the user's own field |
+| Link type is null unless known (DevHunt's free listing and Reddit are nofollow) | Never invent |
+| Claude never submits, signs up or posts; it only finds and saves places | Same rule as never posting on X |
+| Ticks save at once (`useOptimistic`), roll back with a message pinned to the bottom of the screen if saving fails | Feels instant on a phone; a failure is never silent and is seen wherever the list is scrolled |
+| A row ticked under a filter stays in view until the filter or search changes | Nothing jumps away under the pointer |
+| No reordering, deleting or "live" state yet | Not asked for; Claude can note a closed place |
+| `segmentedGroup` and `segmentedItem` exported from `SegmentedLinks` | The list filter is buttons, not links, but looks the same |
+| shadcn `checkbox`, added with its CLI; the `cn` package the CLI added was removed again | The part imports the project's own `cn` from `lib/utils`, so the package isn't needed |
+
+## Backlinks per website (6 Nov 2026)
+
+| Decision | Why |
+| --- | --- |
+| One backlinks list per website, picked from a menu next to the title (Siamak) | Backlinks belong to a domain: the right places differ by product, and a tick means "this website is submitted there" |
+| Websites are an app input; the page asks for one before showing any list (Siamak) | No list makes sense without knowing what it's for |
+| A `website` table; `backlink` gets `website_id` and keeps `user_id` | Every query stays scoped to the user, as everywhere else |
+| Adding a website copies the starter list in, in one transaction; no more seeding on first read | The list exists from the moment the website does, so reads never write |
+| The unshipped `0001_backlinks` migration was regenerated, not followed by a 0002 | It had only run on throwaway local databases; production never saw it |
+| A website is cleaned on the way in: `https://` added when missing, no query, hash or trailing slash; a page such as a GitHub repo is allowed | People type "simpledash.com"; open source lives on GitHub |
+| Adding a website that's already there opens it instead of failing | One less error, the same result |
+| Up to 20 websites, no removing yet | Plenty for one person; removing wasn't asked for |
+| The open website is in the address (`?site=simpledash.com`), not remembered elsewhere | Readable and shareable, no cookie or stored state; the first website opens without it |
+| Claude can't add websites; `get_backlinks` and `save_backlinks` take an optional `website`, needed when there are several | Websites are the user's input; the error names their websites, so Claude asks |
+| `get_backlinks` drops the playbook's `about`; the routine opens the website instead | The website says what the product is better than the X playbook does |
+| `OneFieldForm` in `components/shared`, used by the X profile form and the website form | Reuse first: the same one-field form, label, error and kept value |
+
 ## Dependencies
 
 | Package | Why |

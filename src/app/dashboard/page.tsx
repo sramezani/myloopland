@@ -79,7 +79,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   return (
     <>
-      <TopBar menu={menu} />
+      <TopBar menu={menu} current="calendar" />
       <main id="main" className="pb-16">
         <Container className="flex flex-col gap-5 pt-6">
           <header className="flex flex-col gap-1.5">

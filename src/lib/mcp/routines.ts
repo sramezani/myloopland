@@ -8,12 +8,12 @@ export const ROUTINE_MODES = ["setup", "daily", "morning", "evening", "weekly", 
 export type RoutineMode = (typeof ROUTINE_MODES)[number];
 
 /** The server instructions every MCP client receives. Kept short (Claude Code reads 4,096 characters). */
-export const SERVER_INSTRUCTIONS = `myloopland keeps this user's X (Twitter) growth plan and results: the playbook, the calendar of planned slots, drafts, posts with their numbers, notes, weekly reviews and decisions. You (Claude) do the work; myloopland stores it so every later session can learn from it. The user sees it all on a read-only dashboard and posts by hand.
+export const SERVER_INSTRUCTIONS = `myloopland keeps this user's X (Twitter) growth plan and results: the playbook, the calendar of planned slots, drafts, posts with their numbers, notes, weekly reviews and decisions. You (Claude) do the work; myloopland stores it so every later session can learn from it. The user sees it all on a read-only dashboard and posts by hand. It also keeps, for each of the user's websites, a list of places to submit it to, for backlinks: get_backlinks and save_backlinks.
 
 Start every session with get_briefing, choosing the mode that fits: setup (first time), daily (the one scheduled run each morning: yesterday's numbers, the weekly review when it's due, today's drafts), morning (today's drafts only), evening (what was posted and its numbers), weekly (review and improve the plan) or chat (anything else). It returns the user's state and the steps to follow.
 
 Hard rules:
-- Never post, schedule or reply on X for the user.
+- Never post, schedule or reply on X for the user. Never submit to a site, sign up or post anywhere for them either.
 - Never invent opinions, numbers, users or events. Ask instead, and keep what the user tells you with save_note.
 - Unknown numbers stay unknown: leave them out, never write 0.
 - Save every result with the tools before you finish, so the next session knows.
@@ -147,8 +147,25 @@ const routines: Record<RoutineMode, (ctx: RoutineContext) => string> = {
 - "change my plan: one post a day at 09:00" (or any other change to the times, topics, pillars, rules, voice or goal): update_playbook with the whole playbook, changing only that, and a one-line summary of what and why. Ask first if the change is unclear.
 - "you pick each day's topic": update_playbook, keeping the times and pillars and setting each topic to "Claude's pick". The drafts step then chooses it each day.
 - "write my week ahead": update_playbook, replacing the rule about writing drafts on the day with "Write the next 7 days' drafts after each weekly review, so I can schedule them on X myself. News and takes are still written on the day." Then write them now for the next 7 days' slots, leaving out news and takes. Never schedule anything on X yourself.
-- "how am I doing?": answer from get_briefing (progress and results), or get_stats for more.`,
+- "how am I doing?": answer from get_briefing (progress and results), or get_stats for more.
+- "I submitted simpledash.com to SaaSHub": get_backlinks for that website to find the place's id, then save_backlinks with update submitted: true. "Find new backlink places": follow the steps get_backlinks returns.`,
 };
+
+/**
+ * Finding new backlink places (docs/SPEC.md section 12). Not a get_briefing mode: get_backlinks
+ * returns these steps, and the "backlinks" prompt sends them.
+ */
+export const BACKLINK_ROUTINE = outline(
+  "Backlinks: find new places to submit one of the user's websites to, for links back to it.",
+  [
+    "Read get_backlinks: the website and the places already on its list (with what's submitted). If the user has several websites and didn't say which, ask in one line. Open the website to learn what it is and who it's for.",
+    "Search the web for places that list or launch products like it: launch sites, directories, awesome lists on GitHub, newsletters that take submissions, and communities where sharing your own work is allowed. Look for the user's field too, not only general startup sites.",
+    "Keep only places that are alive (recent launches, listings or posts) and that you could open. Skip any already listed: the same site and page.",
+    `For each new place: the name, the page to submit on (or the home page), the category (launch, directory or community), the cost as the site says it ("Free", "Free + paid", "Paid from $19"), and a one-line note with the catch (rules, waiting time, a badge to add, upvotes needed). Set link_type only when the site says whether its links are followed. Never invent prices, rules or numbers: leave out what you couldn't confirm.`,
+    "If a listed place has moved, closed or changed its price, save_backlinks with an update for it, saying so in the note.",
+    "save_backlinks with the website and the new places, up to 20 at a time. Reply with what you added, one line each, the best 3 first. Never submit, sign up or post for the user: they do that and tick it on the page.",
+  ],
+);
 
 export function routineFor(mode: RoutineMode, ctx: RoutineContext): string {
   return routines[mode](ctx);

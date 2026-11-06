@@ -4,7 +4,7 @@ How myloopland is built. The "what and why" is `docs/BRIEF.md`; Claude's side (c
 
 ## 1. In one paragraph
 
-A Next.js app with Google sign-in and one input (the X profile). It serves a read-only calendar and an MCP endpoint at `/mcp`. The user's Claude connects to `/mcp` through OAuth (the same Google sign-in), then plans, drafts, records posts and numbers, and reviews the week through 13 tools. Postgres keeps everything. One server, Docker Compose, Caddy, Cloudflare.
+A Next.js app with Google sign-in and three inputs: the X profile, the user's websites, and a tick on each backlink place the user has submitted to. It serves a read-only calendar, a backlinks list and an MCP endpoint at `/mcp`. The user's Claude connects to `/mcp` through OAuth (the same Google sign-in), then plans, drafts, records posts and numbers, reviews the week and finds new backlink places through 15 tools. Postgres keeps everything. One server, Docker Compose, Caddy, Cloudflare.
 
 ## 2. Architecture
 
@@ -19,12 +19,13 @@ myloopland: Next.js, one container
    ├─ /consent              the user allows Claude to connect
    ├─ /dashboard            read-only calendar (server components)
    ├─ /dashboard/plan       the active playbook, read-only
+   ├─ /dashboard/backlinks  one list per website of places to submit it to, with a tick for each (section 12)
    └─ src/lib/*             one data layer, used by both MCP tools and pages
    ▼
 Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
 ```
 
-- **Writes** come only from Claude, through the MCP tools, plus the X profile form and "Delete account".
+- **Writes** come only from Claude, through the MCP tools, plus the X profile form, adding a website, the backlink ticks and "Delete account".
 - **The server never calls X.** Claude reads X in the user's own browser and sends the numbers.
 - **No jobs** run on the server except the nightly backup and cleanup. Claude's routines are scheduled in each user's own Claude.
 
@@ -35,8 +36,8 @@ Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
 | `src/config/theme.ts` | Colours, radius, shadows, brand facts (plain data) |
 | `src/components/ui` | shadcn parts |
 | `src/components/shared` | Reusable blocks that take props and fetch nothing: `CardShell`, `CopyButton`, `Copyable`, `StatusBadge`, `Metric`, `SegmentedLinks`, `RangeNav`, `Notice`, `EmptyState`, `Logo`, `GoogleButton`, `Container` |
-| `src/components/{account,calendar,onboarding,plan}` | Feature components |
-| `src/lib` | Data access and helpers: `db`, `auth`, `playbook`, `calendar`, `posts`, `notes`, `reviews`, `stats`, `progress`, `profile`, `account`, `mcp`, `x`, `dates`, `format` |
+| `src/components/{account,backlinks,calendar,onboarding,plan}` | Feature components |
+| `src/lib` | Data access and helpers: `db`, `auth`, `playbook`, `calendar`, `posts`, `notes`, `reviews`, `stats`, `progress`, `profile`, `account`, `backlinks`, `mcp`, `x`, `dates`, `format` |
 | `src/app` | Routes, pages and server actions |
 
 Layers: `src/config` → `components/ui` → `components/shared` → feature folders → `src/app`. Each imports only from its own folder and the layers before; `src/lib` imports only `config` and `lib`. ESLint enforces it, and bans relative `../` imports. All formatting of numbers and days goes through `src/lib/format.ts`.
@@ -57,6 +58,8 @@ One file, `src/lib/db/schema.ts`. Singular table names; camelCase keys with snak
 | `note` | What the user told Claude: dump, take, idea, fact, feedback; `used_at` once a draft used it |
 | `review` | A weekly review: period, summary, findings |
 | `decision` | A suggested playbook change: pending, approved (with the playbook version) or skipped |
+| `website` | A website the user collects backlinks for (section 12): url, `url_key`. Unique (user_id, url_key) |
+| `backlink` | A place to submit one website to (section 12): website_id, name, url, `url_key`, category, cost, note, link type, position, who added it, `submitted_at`. Unique (website_id, url_key) |
 
 Migrations live in `drizzle/` and run when the container starts (`scripts/migrate.mjs`).
 
@@ -103,6 +106,8 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
   - `/consent`.
   - `/dashboard`: the X profile form until there is one, then the progress line with a "Your plan" link, "Connect your Claude" until it is connected, the followers chart (once there are readings on two days), and the calendar.
   - `/dashboard/plan`: the active playbook, read-only (section 5). Also in the menu.
+  - `/dashboard/backlinks`: a website picker and that website's places to submit it to, with a tick for each (section 12).
+- **Top bar:** the logo, two tabs (Calendar, which also holds the plan page, and Backlinks) and the account menu. Below 640 px the tabs move to a second row under the logo. Before the X profile is added there are no tabs, so the first screen has one job.
   - `/privacy`.
 - **The look** follows the "X growth dashboard" mockup: warm stone, orange accent (`#C2410C`), Inter. All values live in `src/config/theme.ts`. A test checks WCAG AA contrast for every pair listed there.
 - **Status words and chips** (`StatusBadge`):
@@ -153,3 +158,32 @@ On the server, `POSTGRES_PASSWORD` and the optional `R2_*` values are also used 
 - **MCP by hand:**
   - MCP Inspector against `http://localhost:3000/mcp` (dynamic registration is on in development).
   - Claude Code: `claude mcp add --transport http myloopland http://localhost:3000/mcp`.
+
+## 12. Backlinks
+
+For each of the user's websites, a list of places to submit it to, for links back to it: launch sites, directories and communities. The user adds their websites on the page and ticks a place once they've submitted it; Claude finds new places and adds them. One list per website (Siamak, 6 Nov 2026), because the right places differ by product and a tick means "this website is submitted there".
+
+- **The tables:**
+  - `website`: `url` as the user typed it, cleaned (`https://` added when missing; no query, hash or trailing slash), and `url_key`, unique per user. A page such as a GitHub repo counts as a website. Up to 20 per user. No removing yet.
+  - `backlink`, one row per place on one website's list:
+    - `website_id` (and `user_id`, so every query stays scoped to the user).
+    - `name`, `url` (the page to submit on, or the home page), and `url_key`: the address in lower case without the scheme, `www.`, query, hash or trailing slash. It is unique per website, so a place is listed once on each list (`src/lib/backlinks/url.ts`).
+    - `category`: launch (one launch day or week), directory (a lasting listing) or community (a post; read the rules first).
+    - `cost` as the site says it ("Free", "Free + paid") and `note` (the catch, in one line). Both may be empty.
+    - `link_type`: dofollow, nofollow, or null when unknown. Never guessed.
+    - `position` (the list order), `added_by` (starter or claude), `submitted_at` (null until ticked).
+- **The starter list** (`src/lib/backlinks/starter.ts`, from Siamak's research, 5 Nov 2026): 40 places with plain notes that suit any product. Niche places (such as a subreddit for one field) are left to Claude, which opens the website and searches for its field. Adding a website copies the starter list into its own list, in the same transaction.
+- **The page** (`/dashboard/backlinks`, server component; `BacklinkList` and `WebsitePicker` are the client parts):
+  - **No website yet:** the page only asks for one: a card with one field and "Add website". No list is shown before that.
+  - **Picker:** next to the title, a button with the open website's address. Its menu lists the websites (the open one ticked), each a link to its list, then "Add website" last, which opens a small dialog with one field. `?site=simpledash.com` (the `url_key`) picks the website; without it the first one added opens. Adding a website that's already there just opens it.
+  - A summary: how many are submitted, as a bar and per category.
+  - A filter (All, To do, Submitted, with counts) and a search over name, address and note.
+  - One section per category. Each row has a checkbox, the name linking to the site (new tab), the site's address, the cost, the note, the link type when known, "New" for places Claude added in the last 14 days, and the day it was ticked.
+  - Ticking saves at once: the row changes straight away and goes back, with a message, if saving fails. A row ticked while the list is filtered stays in view until the filter changes, so nothing jumps away under the pointer. Switching websites starts the filter and search afresh.
+  - "Find more with Claude" has lines to copy that name the open website. On a phone the header leaves out its shortcut; the card is at the end of the list.
+- **Writes:** adding a website and the tick are server actions (`requireUser()`, checked against the user). With the X profile they are the app's inputs (Siamak, 5 and 6 Nov 2026). Claude can't add websites; it writes places through `save_backlinks`.
+- **MCP** (`docs/mcp.md`):
+  - `get_backlinks(website?)` returns one website's list, the counts, all the user's websites and the steps for finding new places. `website` is needed only when the user has more than one; the error names them, so Claude can ask.
+  - `save_backlinks(website?, add, update)` adds places to that website's list and changes its places by id: cost, note, link type or submitted. A new place whose address is already on the list is reported back, not added.
+  - The prompt "Find new backlink places" runs the routine.
+  - Claude never submits, signs up or posts for the user. It may tick a place when the user says they submitted it.

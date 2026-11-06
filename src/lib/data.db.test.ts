@@ -176,13 +176,115 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
     });
   });
 
+  it("gives each website its own backlinks list, ticks places and keeps each place once", async () => {
+    const {
+      addWebsite,
+      findWebsite,
+      listBacklinks,
+      listWebsites,
+      saveBacklinks,
+      setBacklinkSubmitted,
+    } = await import("@/lib/backlinks/backlinks");
+    const { STARTER_PLACES } = await import("@/lib/backlinks/starter");
+    const { db } = await import("@/lib/db/client");
+    const { user } = await import("@/lib/db/schema");
+
+    await expect(findWebsite(userId)).rejects.toThrow("no website on the backlinks list yet");
+    await expect(addWebsite(userId, "not a website")).rejects.toThrow(
+      "That doesn't look like a website.",
+    );
+
+    // The same website added twice at once (two tabs) is one website with one starter list.
+    const [site, again] = await Promise.all([
+      addWebsite(userId, "SimpleDash.com"),
+      addWebsite(userId, "https://www.simpledash.com/"),
+    ]);
+    expect(again.id).toBe(site.id);
+    expect(site).toMatchObject({ url: "https://simpledash.com", key: "simpledash.com" });
+    expect(await findWebsite(userId)).toEqual(site);
+
+    const first = await listBacklinks(userId, site.id);
+    expect(first).toHaveLength(STARTER_PLACES.length);
+    expect(first[0]).toMatchObject({ name: "Product Hunt", addedBy: "starter", submittedAt: null });
+
+    const tool = await addWebsite(userId, "github.com/me/tool");
+    expect((await listWebsites(userId)).map((each) => each.key)).toEqual([
+      "simpledash.com",
+      "github.com/me/tool",
+    ]);
+    await expect(findWebsite(userId)).rejects.toThrow(
+      "Say which website with `website`: simpledash.com, github.com/me/tool.",
+    );
+    expect(await findWebsite(userId, "https://www.SimpleDash.com")).toEqual(site);
+    await expect(findWebsite(userId, "elsewhere.com")).rejects.toThrow(
+      "elsewhere.com isn't on the backlinks list.",
+    );
+
+    const saashub = first.find((p) => p.name === "SaaSHub")!;
+    const ticked = await setBacklinkSubmitted(userId, saashub.id, true);
+    expect(ticked).not.toBeNull();
+    // Ticking again keeps the first date; unticking clears it.
+    expect(await setBacklinkSubmitted(userId, saashub.id, true)).toBe(ticked);
+    expect(await setBacklinkSubmitted(userId, saashub.id, false)).toBeNull();
+
+    const saved = await saveBacklinks(userId, site.id, {
+      add: [
+        { name: "Dupe", url: "http://saashub.com/", category: "directory" },
+        {
+          name: "r/GoogleAnalytics",
+          url: "https://www.reddit.com/r/GoogleAnalytics",
+          category: "community",
+          cost: "Free",
+        },
+      ],
+      update: [{ id: saashub.id, note: "Listed with screenshots.", submitted: true }],
+    });
+    expect(saved.added.map((p) => p.name)).toEqual(["r/GoogleAnalytics"]);
+    expect(saved.skipped).toEqual([
+      { name: "Dupe", url: "http://saashub.com/", reason: "already listed as SaaSHub" },
+    ]);
+    expect(saved.total).toBe(STARTER_PLACES.length + 1);
+    const list = await listBacklinks(userId, site.id);
+    expect(list.at(-1)).toMatchObject({ name: "r/GoogleAnalytics", addedBy: "claude" });
+    expect(list.find((p) => p.id === saashub.id)).toMatchObject({
+      note: "Listed with screenshots.",
+    });
+    expect(list.find((p) => p.id === saashub.id)!.submittedAt).not.toBeNull();
+
+    // The other website's list is its own: nothing added, nothing ticked.
+    const toolList = await listBacklinks(userId, tool.id);
+    expect(toolList).toHaveLength(STARTER_PLACES.length);
+    expect(toolList.every((p) => p.submittedAt === null)).toBe(true);
+    await expect(
+      saveBacklinks(userId, site.id, { add: [], update: [{ id: toolList[0]!.id, note: "x" }] }),
+    ).rejects.toThrow("There is no backlink place");
+
+    // Another user's websites and ids are unknown here.
+    const otherId = `other-${crypto.randomUUID()}`;
+    await db.insert(user).values({ id: otherId, name: "Other", email: `${otherId}@example.com` });
+    try {
+      expect(await listBacklinks(otherId, site.id)).toEqual([]);
+      await expect(setBacklinkSubmitted(otherId, saashub.id, true)).rejects.toThrow(
+        `There is no backlink place with id ${saashub.id}.`,
+      );
+      await expect(
+        saveBacklinks(otherId, site.id, { add: [], update: [{ id: saashub.id, submitted: true }] }),
+      ).rejects.toThrow("There is no backlink place");
+    } finally {
+      const { deleteAccount } = await import("@/lib/account/account");
+      await deleteAccount(otherId);
+    }
+  });
+
   it("deletes everything with the account", async () => {
     const { deleteAccount } = await import("@/lib/account/account");
     const { db } = await import("@/lib/db/client");
-    const { post, playbook } = await import("@/lib/db/schema");
+    const { backlink, post, playbook, website } = await import("@/lib/db/schema");
     const { eq } = await import("drizzle-orm");
     await deleteAccount(userId);
     expect(await db.select().from(post).where(eq(post.userId, userId))).toEqual([]);
     expect(await db.select().from(playbook).where(eq(playbook.userId, userId))).toEqual([]);
+    expect(await db.select().from(backlink).where(eq(backlink.userId, userId))).toEqual([]);
+    expect(await db.select().from(website).where(eq(website.userId, userId))).toEqual([]);
   });
 });

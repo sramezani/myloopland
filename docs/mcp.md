@@ -47,10 +47,12 @@ Inputs are Zod-checked (texts up to 2,000 to 4,000 characters, lists up to 50 it
 | `save_note(kind, text, post_id?)` | Something the user said: dump, take, idea, fact or feedback |
 | `save_review(period, summary, findings[], suggestions[])` | The weekly review; each suggestion becomes a pending decision |
 | `decide(decision_id, status, note?)` | The user's answer to a suggestion |
+| `get_backlinks(website?)` | One website's backlinks list: places to submit it to, each with cost, note, link type (null when unknown) and whether it's submitted; the counts; all the user's websites; and the steps for finding new places. `website` (eg `simpledash.com`) is needed when the user has more than one; the error names them so Claude can ask. With no website yet, the error asks the user to add one on the Backlinks page |
+| `save_backlinks(website?, add[], update[])` | Adds places to one website's list (up to 20; one already listed at the same address is skipped and named in the answer) and changes its listed ones by id: name, address, category, cost, note, link type, or `submitted` |
 
 ## Routines
 
-The steps live in `src/lib/mcp/routines.ts` and go out three ways: in the server `instructions` (short), as MCP prompts (`setup`, `daily`, `morning`, `evening`, `weekly`; Claude Code shows them as `/myloopland:daily`), and inside `get_briefing(mode)`. So any Claude app follows them without a skill, and an improvement ships with the next deploy. The daily routine is built from the same step lists as the morning, evening and weekly ones, so they can't drift apart.
+The steps live in `src/lib/mcp/routines.ts` and go out three ways: in the server `instructions` (short), as MCP prompts (`setup`, `daily`, `morning`, `evening`, `weekly`, `backlinks`; Claude Code shows them as `/myloopland:daily`), and inside `get_briefing(mode)` (the backlinks steps come with `get_backlinks` instead). So any Claude app follows them without a skill, and an improvement ships with the next deploy. The daily routine is built from the same step lists as the morning, evening and weekly ones, so they can't drift apart.
 
 - **setup:**
   1. If Claude can browse, it reads the bio and follower count at the top of the profile (no scrolling).
@@ -64,7 +66,8 @@ The steps live in `src/lib/mcp/routines.ts` and go out three ways: in the server
 - **morning:** drafts for today's slots from notes, real events and the last 24 hours of news, each with a reason from past numbers. Asks instead of guessing. A "Claude's pick" topic is chosen first; drafts written ahead are left as they are.
 - **evening (needs a browser signed in to X):** the daily routine's numbers part for today, then skips today's unposted slots. Never downloads. If the analytics page isn't available, it falls back to the profile or a screenshot.
 - **weekly:** `get_stats` for 4 weeks, 1 to 3 changes backed by numbers, `save_review`, asks the user, then `update_playbook` or `decide`. If the playbook's rules ask for drafts ahead, it then writes the next 7 days' drafts, except news and takes.
-- **chat:** short commands such as "take 2: overhyped", "posted option 2" or "approve 1, skip 2", plus plan changes in plain words: "change my plan: one post a day at 09:00", "you pick each day's topic" (topics become "Claude's pick") and "write my week ahead" (a playbook rule; the user schedules the drafts on X themselves).
+- **backlinks** (`BACKLINK_ROUTINE`, the prompt "Find new backlink places"): read the website's list, ask which website if the user has several and didn't say, open the website to learn what it is, search the web for live launch sites, directories, awesome lists, newsletters and communities in the user's field, skip what's listed, and save each new place with its cost and catch (link type only when the site says so). Places that moved, closed or changed price get an update. Claude never submits, signs up or posts for the user; the user ticks a place on the page, or says "I submitted simpledash.com to SaaSHub" in chat.
+- **chat:** short commands such as "take 2: overhyped", "posted option 2", "approve 1, skip 2" or "I submitted simpledash.com to SaaSHub", plus plan changes in plain words: "change my plan: one post a day at 09:00", "you pick each day's topic" (topics become "Claude's pick") and "write my week ahead" (a playbook rule; the user schedules the drafts on X themselves).
 
 Voice: the user's own writing skill if they have one (Sia: `x-posts`), otherwise `playbook.voice`, learning from how they edit drafts.
 

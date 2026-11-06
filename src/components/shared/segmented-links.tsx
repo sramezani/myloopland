@@ -14,22 +14,30 @@ type SegmentedLinksProps = {
  */
 export function SegmentedLinks({ label, options, className }: SegmentedLinksProps) {
   return (
-    <nav aria-label={label} className={cn("inline-flex gap-1 rounded-xl bg-muted p-1", className)}>
+    <nav aria-label={label} className={cn(segmentedGroup, className)}>
       {options.map((option) => (
         <Link
           key={option.href}
           href={option.href}
           aria-current={option.current ? "page" : undefined}
-          className={cn(
-            "inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-semibold whitespace-nowrap transition-colors pointer-coarse:h-11",
-            option.current
-              ? "bg-foreground text-card"
-              : "text-muted-foreground hover:bg-card hover:text-foreground",
-          )}
+          className={segmentedItem(option.current)}
         >
           {option.label}
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** The look of a segmented control, for the same control made of buttons (a list filter). */
+export const segmentedGroup = "inline-flex gap-1 rounded-xl bg-muted p-1";
+
+export function segmentedItem(current: boolean, className?: string) {
+  return cn(
+    "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold whitespace-nowrap transition-colors pointer-coarse:h-11",
+    current
+      ? "bg-foreground text-card"
+      : "text-muted-foreground hover:bg-card hover:text-foreground",
+    className,
   );
 }

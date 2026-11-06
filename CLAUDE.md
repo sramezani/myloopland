@@ -1,6 +1,6 @@
 # myloopland: brief for Claude Code
 
-myloopland helps anyone grow their X account with their own Claude. The user's Claude (claude.ai, desktop, mobile, Claude Code) does the work through an MCP connector: it plans the week, drafts each day's posts, reads the numbers on x.com and reviews what worked. myloopland keeps the data (playbook, drafts, posts, numbers, notes, reviews, decisions), so every Claude session learns from the last ones, and shows it on a read-only calendar. Google sign-in, one input (the X profile), no pricing.
+myloopland helps anyone grow their X account with their own Claude. The user's Claude (claude.ai, desktop, mobile, Claude Code) does the work through an MCP connector: it plans the week, drafts each day's posts, reads the numbers on x.com and reviews what worked. myloopland keeps the data (playbook, drafts, posts, numbers, notes, reviews, decisions), so every Claude session learns from the last ones, and shows it on a read-only calendar. It also keeps a backlinks list for each of the user's websites: places to submit it to, ticked by the user and grown by Claude. Google sign-in, no pricing.
 
 - **What and why:** `docs/BRIEF.md`. This is Siamak's brief; don't edit it.
 - **How:** `docs/SPEC.md`. Update the spec before building something differently, and log the change in `docs/DECISIONS.md`.
@@ -17,7 +17,7 @@ myloopland helps anyone grow their X account with their own Claude. The user's C
 
 These are not up for debate. Anything that would break one goes to Siamak first.
 
-1. **Claude does the work; myloopland keeps the data.** The web app's only input is the X profile. Everything else arrives through the MCP tools.
+1. **Claude does the work; myloopland keeps the data.** The web app's inputs are the X profile, the user's websites and the backlink ticks. Everything else arrives through the MCP tools.
 2. **Never post, schedule or reply on X**, and the server never calls X. Numbers come from Claude reading the user's own X analytics page (or a screenshot).
 3. **Never invent.** Drafts come from the user's notes, real events and public news. Numbers come from X. Unknown is "—", never 0.
 4. **It's the user's plan.** The playbook is only a starting point: any number of posts a day, any times, any mix. Nothing is enforced.
@@ -67,7 +67,7 @@ deploy/setup.sh user@ip   # Siamak only: set up (or, with --from, move to) the p
 - **Components:** server components by default. Client components only for interaction: Copy, forms, the menu, sign-in and consent buttons.
 - **Theme tokens only:** `src/config/theme.ts` is the only place for colours. Use token classes such as `bg-primary` and `text-muted-foreground`. Never hex, `rgb()`, palette classes (`bg-blue-500`) or arbitrary colour classes. Lint and tests enforce this.
 - **Reuse first:** before writing a component, helper or util, look in CodeGraph, `src/components/ui`, `src/components/shared` and `src/lib`. Add shadcn parts with its CLI. Extend with a prop or a `cva` variant instead of copying.
-- **Layers:** `src/config` → `components/ui` → `components/shared` → feature folders (`account`, `calendar`, `onboarding`, `plan`) → `src/app`. Each imports only from its own folder and the layers before it, and shared blocks never fetch data. ESLint enforces it.
+- **Layers:** `src/config` → `components/ui` → `components/shared` → feature folders (`account`, `backlinks`, `calendar`, `onboarding`, `plan`) → `src/app`. Each imports only from its own folder and the layers before it, and shared blocks never fetch data. ESLint enforces it.
 - **UI quality:** mobile first; the user copies drafts from their phone. Check UI changes at 375 px and 1440 px and with the keyboard only.
 - **Tests:** next to the code (`*.test.ts`). Database tests are `*.db.test.ts` and need `TEST_DATABASE_URL` (an empty database they may write to).
 - **Docs:** plain words. Refer to a part of a doc as "section 6", never with symbols.

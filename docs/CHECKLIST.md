@@ -70,3 +70,13 @@ One version, ordered in sprints. Tick a task with the date when it's done (`npm 
 - [ ] One weekly review with an approved and a skipped suggestion
 - [ ] The daily scheduled task (one run each morning), from the desktop app
 - [ ] Tune the routine texts and tool descriptions from what was learned
+
+## S7. Backlinks
+
+- [x] Spec (section 12), `backlink` table and migration, starter list of 40 places (5 Nov 2026)
+- [x] Data layer: starter list on first read, ticks, adding and changing places, one row per address; database tests (5 Nov 2026)
+- [x] MCP: `get_backlinks`, `save_backlinks`, the backlinks routine and prompt; tested over the real handler (5 Nov 2026)
+- [x] Top-bar tabs (Calendar, Backlinks) and `/dashboard/backlinks`: progress, filter, search, sections, instant ticks with rollback; checked at 375 px and 1440 px and with the keyboard (5 Nov 2026)
+- [x] One list per website: `website` table, the migration regenerated, the starter list copied in when a website is added; database and MCP tests (6 Nov 2026)
+- [x] Website picker next to the title, "Add website" in a small dialog, and a page that only asks for a website until there is one; checked at 375 px and 1440 px and with the keyboard (6 Nov 2026)
+- [ ] Ask a real Claude to "find new backlink places for simpledash.com" after the deploy, and tune the routine text

@@ -6,8 +6,10 @@ Grow your X account with your own Claude.
 
 Your Claude plans your week, drafts each day's posts, reads your numbers on X and reviews what worked. myloopland keeps all of it (the playbook, drafts, posts, numbers, notes, reviews and decisions) so every week gets a little better, and shows it on a simple calendar, next to the plan itself and a chart of your followers. You sign in with Google, type your X profile once, connect Claude, and post by hand.
 
+It also keeps a **backlinks list** for each of your websites: launch sites, directories and communities to submit it to, for links back to it. Add a website on the Backlinks page and its list starts with 40 places; you tick each one once you've submitted it, and Claude finds new ones and adds them.
+
 - No X password, no X API: myloopland never posts for you.
-- One input in the app. Everything else happens in Claude, through the MCP connector at `https://myloopland.com/mcp` (`<APP_URL>/mcp` on your own copy).
+- Three inputs in the app: your X profile, your websites, and the backlink ticks. Everything else happens in Claude, through the MCP connector at `https://myloopland.com/mcp` (`<APP_URL>/mcp` on your own copy).
 - Each user's own plan: the default is 2 posts a day, and Claude changes it with you. The dashboard shows it (read-only), and you can ask Claude to write a week ahead if you'd rather schedule posts on X yourself.
 
 ## How it works

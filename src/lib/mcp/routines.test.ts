@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROUTINE_MODES, routineFor, SERVER_INSTRUCTIONS } from "./routines";
+import { BACKLINK_ROUTINE, ROUTINE_MODES, routineFor, SERVER_INSTRUCTIONS } from "./routines";
 
 const ctx = { handle: "siaramzee" };
 
@@ -32,6 +32,16 @@ describe("routineFor", () => {
 
   it("names the handle placeholder before the user has one", () => {
     expect(routineFor("evening", { handle: null })).toContain("@<handle>");
+  });
+});
+
+describe("BACKLINK_ROUTINE", () => {
+  it("numbers its steps, saves with save_backlinks and never submits for the user", () => {
+    const numbers = [...BACKLINK_ROUTINE.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
+    expect(numbers).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(BACKLINK_ROUTINE).toContain("get_backlinks");
+    expect(BACKLINK_ROUTINE).toContain("save_backlinks");
+    expect(BACKLINK_ROUTINE).toContain("Never submit");
   });
 });
 

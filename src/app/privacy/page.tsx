@@ -14,8 +14,8 @@ const sections = [
     title: "What we store",
     items: [
       "From Google: your name, email address and profile picture, to sign you in.",
-      "What you type here: your X profile address. We also keep your time zone, read from your browser, so your plan's times are yours.",
-      "What your Claude saves through the connector: your plan and its old versions, drafts, the posts you made with their numbers, your notes, weekly reviews and decisions.",
+      "What you type here: your X profile address, the websites you add for backlinks, and which places you ticked as submitted. We also keep your time zone, read from your browser, so your plan's times are yours.",
+      "What your Claude saves through the connector: your plan and its old versions, drafts, the posts you made with their numbers, your notes, weekly reviews and decisions, and the places it found to submit your websites to.",
       "Sign-in sessions and Claude's connection, with the browser and IP address that made them, to keep your account safe.",
     ],
   },

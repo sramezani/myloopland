@@ -29,7 +29,10 @@ export default async function PlanPage() {
 
   return (
     <>
-      <TopBar menu={<AccountMenu name={user.name} email={user.email} handle={handle} />} />
+      <TopBar
+        menu={<AccountMenu name={user.name} email={user.email} handle={handle} />}
+        current="calendar"
+      />
       <main id="main" className="pb-16">
         <Container className="flex max-w-3xl flex-col gap-5 pt-6">
           <header className="flex flex-col gap-1.5">

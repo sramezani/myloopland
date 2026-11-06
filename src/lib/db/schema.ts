@@ -391,11 +391,17 @@ export const POST_STATUSES = ["planned", "needs_input", "drafted", "posted", "sk
 export const POST_KINDS = ["post", "quote", "thread", "community"] as const;
 export const NOTE_KINDS = ["dump", "take", "idea", "fact", "feedback"] as const;
 export const DECISION_STATUSES = ["pending", "approved", "skipped"] as const;
+export const BACKLINK_CATEGORIES = ["launch", "directory", "community"] as const;
+export const LINK_TYPES = ["dofollow", "nofollow"] as const;
+export const BACKLINK_SOURCES = ["starter", "claude"] as const;
 
 export type PostStatus = (typeof POST_STATUSES)[number];
 export type PostKind = (typeof POST_KINDS)[number];
 export type NoteKind = (typeof NOTE_KINDS)[number];
 export type DecisionStatus = (typeof DECISION_STATUSES)[number];
+export type BacklinkCategory = (typeof BACKLINK_CATEGORIES)[number];
+export type LinkType = (typeof LINK_TYPES)[number];
+export type BacklinkSource = (typeof BACKLINK_SOURCES)[number];
 
 /** One user's playbook versions. The newest one is active; older ones are history. */
 export const playbook = pgTable(
@@ -573,6 +579,58 @@ export const decision = pgTable(
   (table) => [index("decision_user_id_status_idx").on(table.userId, table.status)],
 );
 
+/** A website the user collects backlinks for, added on the Backlinks page (docs/SPEC.md section 12). */
+export const website = pgTable(
+  "website",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    /** "https://simpledash.com" or a page such as "https://github.com/me/tool". */
+    url: text("url").notNull(),
+    /** The address without scheme, www or trailing slash: each website once per user. */
+    urlKey: text("url_key").notNull(),
+  },
+  (table) => [uniqueIndex("website_user_id_url_key_idx").on(table.userId, table.urlKey)],
+);
+
+/** A place to submit one of the user's websites to, for a link back (docs/SPEC.md section 12). */
+export const backlink = pgTable(
+  "backlink",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    websiteId: text("website_id")
+      .notNull()
+      .references(() => website.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    /** The address without scheme, www, query, hash or trailing slash: once per website. */
+    urlKey: text("url_key").notNull(),
+    category: text("category", { enum: BACKLINK_CATEGORIES }).notNull(),
+    /** As the site says it: "Free", "Free + paid". Null when unknown. */
+    cost: text("cost"),
+    /** The catch, in one line. */
+    note: text("note"),
+    /** Null when unknown: never guessed. */
+    linkType: text("link_type", { enum: LINK_TYPES }),
+    position: integer("position").notNull(),
+    addedBy: text("added_by", { enum: BACKLINK_SOURCES }).notNull(),
+    /** When the user ticked it as submitted; null until then. */
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  },
+  (table) => [uniqueIndex("backlink_website_id_url_key_idx").on(table.websiteId, table.urlKey)],
+);
+
 export const postRelations = relations(post, ({ one, many }) => ({
   user: one(user, { fields: [post.userId], references: [user.id] }),
   drafts: many(draft),
@@ -596,3 +654,5 @@ export type AccountStat = typeof accountStat.$inferSelect;
 export type Note = typeof note.$inferSelect;
 export type Review = typeof review.$inferSelect;
 export type Decision = typeof decision.$inferSelect;
+export type Website = typeof website.$inferSelect;
+export type Backlink = typeof backlink.$inferSelect;

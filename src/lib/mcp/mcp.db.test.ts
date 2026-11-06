@@ -69,7 +69,7 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     await deleteAccount(userId);
   });
 
-  it("introduces itself with instructions, 13 tools and 5 prompts", async () => {
+  it("introduces itself with instructions, 15 tools and 6 prompts", async () => {
     const init = await call("initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
@@ -79,6 +79,7 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     const tools = (await call("tools/list")).result!.tools as { name: string }[];
     expect(tools.map((t) => t.name).sort()).toEqual([
       "decide",
+      "get_backlinks",
       "get_briefing",
       "get_calendar",
       "get_history",
@@ -86,6 +87,7 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       "plan_slots",
       "record_metrics",
       "record_posts",
+      "save_backlinks",
       "save_drafts",
       "save_note",
       "save_review",
@@ -93,7 +95,14 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       "update_profile",
     ]);
     const prompts = (await call("prompts/list")).result!.prompts as { name: string }[];
-    expect(prompts.map((p) => p.name)).toEqual(["setup", "daily", "morning", "evening", "weekly"]);
+    expect(prompts.map((p) => p.name)).toEqual([
+      "setup",
+      "daily",
+      "morning",
+      "evening",
+      "weekly",
+      "backlinks",
+    ]);
     const daily = (await call("prompts/get", { name: "daily" })).result!;
     expect(JSON.stringify(daily)).toContain("@siaramzee");
   });
@@ -148,5 +157,69 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     expect(JSON.parse(saved.text)).toEqual({ version: 2 });
     const history = JSON.parse((await tool("get_history", { kind: "playbook" })).text);
     expect(history.map((p: { version: number }) => p.version)).toEqual([2, 1]);
+  });
+
+  it("lists a website's backlink places, adds new ones and ticks one the user submitted", async () => {
+    expect(await tool("get_backlinks")).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("ask the user to add theirs on the Backlinks page"),
+    });
+    const { addWebsite } = await import("@/lib/backlinks/backlinks");
+    await addWebsite(userId, "simpledash.com");
+    await addWebsite(userId, "myloopland.com");
+    expect(await tool("get_backlinks")).toEqual({
+      isError: true,
+      text: "Say which website with `website`: simpledash.com, myloopland.com.",
+    });
+
+    const before = JSON.parse((await tool("get_backlinks", { website: "simpledash.com" })).text);
+    expect(before.website).toBe("https://simpledash.com");
+    expect(before.websites).toEqual(["https://simpledash.com", "https://myloopland.com"]);
+    expect(before.submitted).toBe(0);
+    expect(before.steps).toContain("save_backlinks");
+    expect(before.places[0]).toMatchObject({
+      name: "Product Hunt",
+      category: "launch",
+      submitted: false,
+      added_by: "starter",
+    });
+
+    const devhunt = before.places.find((p: { name: string }) => p.name === "DevHunt");
+    const saved = await tool("save_backlinks", {
+      website: "https://www.simpledash.com/",
+      add: [
+        { name: "Again", url: "https://www.devhunt.org/", category: "launch" },
+        {
+          name: "Awesome Analytics",
+          url: "https://github.com/example/awesome-analytics",
+          category: "directory",
+          cost: "Free (pull request)",
+        },
+      ],
+      update: [{ id: devhunt.id, submitted: true }],
+    });
+    expect(saved.isError).toBe(false);
+    const result = JSON.parse(saved.text);
+    expect(result.website).toBe("https://simpledash.com");
+    expect(result.added.map((p: { name: string }) => p.name)).toEqual(["Awesome Analytics"]);
+    expect(result.skipped[0].reason).toBe("already listed as DevHunt");
+
+    const after = JSON.parse((await tool("get_backlinks", { website: "simpledash.com" })).text);
+    expect(after.submitted).toBe(1);
+    expect(after.total).toBe(before.total + 1);
+    expect(after.places.at(-1)).toMatchObject({ name: "Awesome Analytics", added_by: "claude" });
+    // The other website's list didn't change.
+    const other = JSON.parse((await tool("get_backlinks", { website: "myloopland.com" })).text);
+    expect(other).toMatchObject({ submitted: 0, total: before.total });
+
+    expect(await tool("save_backlinks", {})).toEqual({
+      isError: true,
+      text: "Send at least one place to add or update.",
+    });
+    const notWeb = await call("tools/call", {
+      name: "save_backlinks",
+      arguments: { add: [{ name: "x", url: "ftp://example.com", category: "directory" }] },
+    });
+    expect(JSON.stringify(notWeb)).toContain("Use a web address starting with https://");
   });
 });

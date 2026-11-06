@@ -2,7 +2,7 @@ import "server-only";
 import { McpServer } from "@modelcontextprotocol/server";
 import { brand } from "@/config/theme";
 import { getProfile } from "@/lib/profile/profile";
-import { routineFor, SERVER_INSTRUCTIONS, type RoutineMode } from "./routines";
+import { BACKLINK_ROUTINE, routineFor, SERVER_INSTRUCTIONS, type RoutineMode } from "./routines";
 import { registerTools } from "./tools";
 
 const PROMPTS: { mode: Exclude<RoutineMode, "chat">; title: string; description: string }[] = [
@@ -65,5 +65,24 @@ export function buildServer(userId: string): McpServer {
       },
     );
   }
+  server.registerPrompt(
+    "backlinks",
+    {
+      title: "Find new backlink places",
+      description:
+        "Search the web for new places to submit one of your websites to, and add them to its list.",
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: `Run my myloopland backlinks routine. Call get_backlinks first, then follow these steps:\n\n${BACKLINK_ROUTINE}`,
+          },
+        },
+      ],
+    }),
+  );
   return server;
 }
