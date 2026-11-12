@@ -30,6 +30,8 @@ Siamak asked for an Ideas tab: post ideas that Claude (and Codex, through the sa
   - the keyboard: headings with Enter, the tick with Space;
   - 375 px (no sideways scroll; the sort buttons fit one row) and 1440 px; no console or server errors.
 
+- **Later the same day (Siamak):** Claude can re-rate its old ideas too. `rate_idea(idea_id, rater, rating)` sets Claude's or Codex's rating on any idea, whoever added it. `rater` is required, so neither one overwrites the other's rating by leaving it out, and the user's rating can't be set through the tools. The chat routine has "re-rate my old ideas". The database and MCP tests cover re-rating, rating the other's idea, and refusing a missing or "my" rater. All 134 tests pass.
+
 **Learned**
 
 - `npx shadcn add` now writes `import { cn } from "cn"` and installs that package. Check `package.json` after every shadcn add.
@@ -45,7 +47,6 @@ Siamak asked for an Ideas tab: post ideas that Claude (and Codex, through the sa
 **Ideas (not built)**
 
 - A filter on the page (unpublished only), if the list grows long.
-- Let Claude rate ideas Codex added (`rate_idea` with a `rater`), so both columns fill in.
 - Link a published idea to its post on the calendar.
 
 **Next**

@@ -657,16 +657,20 @@ export function registerTools(server: McpServer, userId: string) {
     {
       title: "Rate idea",
       description:
-        "Sets Codex's rating (1 to 10) on an idea already on the list, by its idea_id from get_ideas. Rating it again replaces the rating.",
+        "Sets your rating (1 to 10) on an idea already on the list, by its idea_id from get_ideas: a new rating for an idea you rated before, or a first one for an idea the other one added. `rater` says who you are, claude or codex; only that one's rating changes. The user's own rating is theirs: never set it.",
       inputSchema: z.object({
         idea_id: id,
-        rating: oneToTen.describe("Codex's rating: 1 (weak) to 10 (excellent)"),
+        rater: z.enum(IDEA_SOURCES).describe("Who is rating: claude or codex"),
+        rating: oneToTen.describe("Your rating: 1 (weak) to 10 (excellent)"),
       }),
       annotations: { ...WRITE, idempotentHint: true },
     },
-    ({ idea_id, rating }) =>
+    ({ idea_id, rater, rating }) =>
       run(async () => {
-        const [{ timeZone }, rated] = await Promise.all([me(), rateIdea(userId, idea_id, rating)]);
+        const [{ timeZone }, rated] = await Promise.all([
+          me(),
+          rateIdea(userId, idea_id, rater, rating),
+        ]);
         return { rated: true, idea: ideaForClaude(rated, timeZone) };
       }),
   );

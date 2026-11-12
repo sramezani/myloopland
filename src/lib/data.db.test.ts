@@ -341,17 +341,32 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
       claudeRating: 6,
       details: "Thread, 5 posts",
     });
-    expect(await rateIdea(userId, pricing.id, 9)).toMatchObject({
+    expect(await rateIdea(userId, pricing.id, "codex", 9)).toMatchObject({
       codexRating: 9,
       claudeRating: 6,
     });
-    await rateIdea(userId, pricing.id, 4);
+    await rateIdea(userId, pricing.id, "codex", 4);
+    // Claude changes its mind about its own idea, and rates the one Codex added.
+    expect(await rateIdea(userId, pricing.id, "claude", 3)).toMatchObject({
+      claudeRating: 3,
+      codexRating: 4,
+    });
+    expect(await rateIdea(userId, slack.id, "claude", 8)).toMatchObject({
+      source: "codex",
+      claudeRating: 8,
+      codexRating: 7,
+    });
     await setMyRating(userId, building.id, 10);
     await setMyRating(userId, slack.id, 3);
     await setMyRating(userId, slack.id, null);
     await setIdeaPublished(userId, building.id, true);
 
     const ids = (list: { id: string }[]) => list.map((each) => each.id);
+    expect(ids(await listIdeas(userId, { sort: "claude" }))).toEqual([
+      slack.id,
+      building.id,
+      pricing.id,
+    ]);
     expect(ids(await listIdeas(userId, { sort: "codex" }))).toEqual([
       slack.id,
       pricing.id,
@@ -368,7 +383,9 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
     expect((await listIdeas(userId)).find((each) => each.id === slack.id)?.myRating).toBeNull();
 
     // Ratings outside 1 to 10 never get in, not even past the data layer.
-    await expect(rateIdea(userId, pricing.id, 0)).rejects.toThrow("whole number from 1 to 10");
+    await expect(rateIdea(userId, pricing.id, "claude", 0)).rejects.toThrow(
+      "whole number from 1 to 10",
+    );
     await expect(setMyRating(userId, pricing.id, 11)).rejects.toThrow("whole number from 1 to 10");
     await expect(
       saveIdeas(userId, "claude", [{ title: "Fresh one", description: "x", rating: 12 }]),
@@ -389,7 +406,9 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
     await db.insert(user).values({ id: otherId, name: "Other", email: `${otherId}@example.com` });
     try {
       expect(await listIdeas(otherId)).toEqual([]);
-      await expect(rateIdea(otherId, pricing.id, 5)).rejects.toThrow("There is no idea with id");
+      await expect(rateIdea(otherId, pricing.id, "codex", 5)).rejects.toThrow(
+        "There is no idea with id",
+      );
       await expect(setMyRating(otherId, pricing.id, 5)).rejects.toThrow("There is no idea");
       await expect(setIdeaPublished(otherId, pricing.id, true)).rejects.toThrow("There is no idea");
       // And the same title is fine on someone else's list.
@@ -405,6 +424,7 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
       await deleteAccount(otherId);
     }
     expect((await listIdeas(userId)).find((each) => each.id === pricing.id)).toMatchObject({
+      claudeRating: 3,
       codexRating: 4,
       myRating: null,
       published: false,

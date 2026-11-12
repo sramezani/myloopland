@@ -200,13 +200,13 @@ Post ideas that Claude (or Codex, connected to the same MCP server) suggests and
   - `claude_rating`, `codex_rating` and `my_rating`: whole numbers from 1 to 10, or null when not rated yet. A check constraint keeps them in range. Never 0.
   - `published` (false until the user ticks it) and `source`: claude or codex, whoever saved it.
   - `created_at` and `updated_at`. Up to 1,000 ideas per user.
-- **Who rates what:** the saver's rating goes in its own column: an idea Claude saves has `claude_rating`, one Codex saves has `codex_rating` (Siamak, 12 Nov 2026). Codex rates other ideas with `rate_idea`. Only the user sets `my_rating` and `published`, on the page.
+- **Who rates what:** the saver's rating goes in its own column: an idea Claude saves has `claude_rating`, one Codex saves has `codex_rating` (Siamak, 12 Nov 2026). With `rate_idea`, Claude or Codex rates any idea afterwards (Siamak, 12 Nov 2026): a new rating for one it rated before, as it learns what worked, or a first one for an idea the other added. Only the user sets `my_rating` and `published`, on the page.
 - **Near-duplicates** (`src/lib/ideas/similar.ts`): a new title is skipped when it matches a listed one, or one earlier in the same call, after ignoring case, punctuation, word order, small words ("a", "the", "my") and plural "s". It is also skipped when at least 80% of all the words in both are the same, where a word with a typo counts as the same: one letter off in words of 5 letters or more, two in words of 9 or more. Shorter words and numbers must match exactly, so "first 100 followers" and "first 1000 followers" are two ideas. Skipped ideas are named in the answer with the idea they match. Claude also reads `get_ideas` first, which catches the same idea in other words.
 - **Sorting** (`sortIdeas`, `src/lib/ideas/summary.ts`, used by the page and the tools): newest first by default, or by one rating, highest first. Unrated ideas always go last, and ties go newest first.
 - **MCP** (`docs/mcp.md`):
   - `save_ideas(source?, ideas[])`: up to 25 at a time, each with a title, description, optional details and the saver's rating. `source` is claude unless Codex says codex.
   - `get_ideas(published?, sort?, limit?)`: the list, filtered to published or unpublished ideas, sorted by created, claude, codex or my, up to 500 (default 100), with the counts. Claude calls it before suggesting new ideas.
-  - `rate_idea(idea_id, rating)`: sets `codex_rating`. Rating again replaces it.
+  - `rate_idea(idea_id, rater, rating)`: `rater` (claude or codex, required, so neither overwrites the other by leaving it out) picks the column. Rating again replaces that one's rating; the other ratings stay.
   - The chat routine says when to use each one.
 - **The page** (`/dashboard/ideas`, server component; `IdeaTable` is the client part):
   - The title, a line about what the page is, and the table. With no ideas yet, an empty state and lines to say to Claude.

@@ -99,7 +99,7 @@ Each technical decision and each dependency, with a one-line reason. Newest at t
 | --- | --- |
 | An Ideas tab with an `idea` table, three MCP tools and two page inputs (Siamak) | Siamak asked for it: post ideas rated by Claude, Codex and him, so the best get written and none is suggested twice. It widens principle 1's inputs, by his request |
 | The saver's rating goes in its own column; `claude_rating` is nullable (Siamak) | Codex can add ideas too. An idea Codex adds has no Claude rating, so the column can't require one |
-| `rate_idea` sets only `codex_rating`, one idea per call (Siamak's spec) | What was asked; Claude's rating comes with `save_ideas` |
+| `rate_idea(idea_id, rater, rating)` sets Claude's or Codex's rating, one idea per call (Siamak, a change the same day) | Claude learns what worked and should be able to re-rate its old ideas, as Codex and the user can. `rater` is required, so leaving it out can't overwrite the other's rating |
 | Ratings are whole numbers 1 to 10 or null, with a check constraint | Unknown is null, never 0, and a bad write can't slip past the tools |
 | Near-duplicates are found in code (`src/lib/ideas/similar.ts`): 80% of the words the same after cleaning, a typo in a word of 5 letters or more counting as the same; numbers exact | No extension (such as `pg_trgm`) and no new dependency; a safety net under `get_ideas`, which Claude reads first |
 | One `sortIdeas` for the page and the tools; unrated last whatever the direction | The same order everywhere, and "—" never sorts as 0 |

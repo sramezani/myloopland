@@ -289,11 +289,29 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       added_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
 
-    const rated = await tool("rate_idea", { idea_id: pricing.idea_id, rating: 9 });
+    const rated = await tool("rate_idea", { idea_id: pricing.idea_id, rater: "codex", rating: 9 });
     expect(rated.isError).toBe(false);
     expect(JSON.parse(rated.text)).toMatchObject({
       rated: true,
       idea: { idea_id: pricing.idea_id, claude_rating: 6, codex_rating: 9 },
+    });
+    // Claude re-rates its own old idea, and rates the one Codex added; Codex's ratings stay.
+    const rerated = await tool("rate_idea", {
+      idea_id: pricing.idea_id,
+      rater: "claude",
+      rating: 3,
+    });
+    expect(JSON.parse(rerated.text).idea).toMatchObject({ claude_rating: 3, codex_rating: 9 });
+    const fromClaude = await tool("rate_idea", {
+      idea_id: inbox.idea_id,
+      rater: "claude",
+      rating: 5,
+    });
+    expect(JSON.parse(fromClaude.text).idea).toMatchObject({
+      source: "codex",
+      claude_rating: 5,
+      codex_rating: 7,
+      my_rating: null,
     });
 
     const byCodex = JSON.parse((await tool("get_ideas", { sort: "codex", limit: 2 })).text);
@@ -310,16 +328,24 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     const done = JSON.parse((await tool("get_ideas", { published: true })).text);
     expect(done.ideas.map((i: { idea_id: string }) => i.idea_id)).toEqual([building.idea_id]);
 
-    expect(await tool("rate_idea", { idea_id: "nope", rating: 5 })).toEqual({
+    expect(await tool("rate_idea", { idea_id: "nope", rater: "claude", rating: 5 })).toEqual({
       isError: true,
       text: "There is no idea with id nope.",
     });
     for (const rating of [0, 11, 7.5]) {
       const bad = await call("tools/call", {
         name: "rate_idea",
-        arguments: { idea_id: pricing.idea_id, rating },
+        arguments: { idea_id: pricing.idea_id, rater: "codex", rating },
       });
       expect(JSON.stringify(bad), String(rating)).toContain("isError");
+    }
+    // Who is rating must be said, and the user's own rating can't be set through the tools.
+    for (const args of [{}, { rater: "my" }, { rater: "user" }]) {
+      const refused = await call("tools/call", {
+        name: "rate_idea",
+        arguments: { idea_id: pricing.idea_id, rating: 1, ...args },
+      });
+      expect(JSON.stringify(refused), JSON.stringify(args)).toContain("isError");
     }
     const noRating = await call("tools/call", {
       name: "save_ideas",
@@ -336,6 +362,6 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     expect(after.total).toBe(3);
     expect(
       after.ideas.find((i: { idea_id: string }) => i.idea_id === pricing.idea_id),
-    ).toMatchObject({ codex_rating: 9 });
+    ).toMatchObject({ claude_rating: 3, codex_rating: 9, my_rating: null });
   });
 });

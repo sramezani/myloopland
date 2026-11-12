@@ -116,7 +116,7 @@ export async function saveIdeas(userId: string, source: IdeaSource, ideas: NewId
 async function change(
   userId: string,
   id: string,
-  set: Partial<Pick<Idea, "codexRating" | "myRating" | "published">>,
+  set: Partial<Pick<Idea, "claudeRating" | "codexRating" | "myRating" | "published">>,
 ) {
   const [row] = await db
     .update(idea)
@@ -127,10 +127,22 @@ async function change(
   return toItem(row);
 }
 
-/** Codex's rating on an idea already listed. Rating again replaces it. */
-export async function rateIdea(userId: string, id: string, rating: number): Promise<IdeaItem> {
+/**
+ * Claude's or Codex's rating on an idea already listed, whoever added it. Rating again replaces
+ * that one's rating; the other's stays as it is.
+ */
+export async function rateIdea(
+  userId: string,
+  id: string,
+  rater: IdeaSource,
+  rating: number,
+): Promise<IdeaItem> {
   if (!isRating(rating)) throw new UserFacingError("Rate with a whole number from 1 to 10.");
-  return change(userId, id, { codexRating: rating });
+  return change(
+    userId,
+    id,
+    rater === "claude" ? { claudeRating: rating } : { codexRating: rating },
+  );
 }
 
 /** The user's own rating, from the page; null clears it. */

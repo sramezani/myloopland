@@ -30,12 +30,13 @@ describe("routineFor", () => {
     expect(daily).toContain("@siaramzee");
   });
 
-  it("has chat read the ideas before saving new ones, and Codex rate them", () => {
+  it("has chat read the ideas before saving new ones, and Claude or Codex re-rate them", () => {
     const chat = routineFor("chat", ctx);
     expect(chat.indexOf("get_ideas first")).toBeGreaterThan(-1);
     expect(chat.indexOf("get_ideas first")).toBeLessThan(chat.indexOf("save_ideas"));
-    expect(chat).toContain("rate_idea");
+    expect(chat).toContain("rate_idea with rater claude");
     expect(chat).toContain("source codex");
+    expect(chat).toContain("Never change the user's rating");
   });
 
   it("names the handle placeholder before the user has one", () => {
