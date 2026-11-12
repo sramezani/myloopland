@@ -69,7 +69,7 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
     await deleteAccount(userId);
   });
 
-  it("introduces itself with instructions, 15 tools and 6 prompts", async () => {
+  it("introduces itself with instructions, 18 tools and 6 prompts", async () => {
     const init = await call("initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
@@ -83,12 +83,15 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       "get_briefing",
       "get_calendar",
       "get_history",
+      "get_ideas",
       "get_stats",
       "plan_slots",
+      "rate_idea",
       "record_metrics",
       "record_posts",
       "save_backlinks",
       "save_drafts",
+      "save_ideas",
       "save_note",
       "save_review",
       "update_playbook",
@@ -221,5 +224,118 @@ describe.skipIf(!url)("MCP server (Postgres)", () => {
       arguments: { add: [{ name: "x", url: "ftp://example.com", category: "directory" }] },
     });
     expect(JSON.stringify(notWeb)).toContain("Use a web address starting with https://");
+  });
+
+  it("saves ideas with Claude's and Codex's ratings, skips repeats, lists and rates them", async () => {
+    const empty = JSON.parse((await tool("get_ideas")).text);
+    expect(empty).toEqual({ total: 0, published: 0, matching: 0, ideas: [] });
+
+    const saved = await tool("save_ideas", {
+      ideas: [
+        {
+          title: "Building in public, week 1",
+          description: "What I shipped and what broke",
+          details: "Thread of 4 posts; screenshots",
+          rating: 8,
+        },
+        { title: "Why I price by seat", description: "The maths behind it", rating: 6 },
+      ],
+    });
+    expect(saved.isError).toBe(false);
+    const first = JSON.parse(saved.text);
+    expect(first.saved).toHaveLength(2);
+    expect(first.skipped).toEqual([]);
+
+    const fromCodex = JSON.parse(
+      (
+        await tool("save_ideas", {
+          source: "codex",
+          ideas: [
+            { title: "building in public — week 1!", description: "Same again", rating: 9 },
+            { title: "A support inbox at zero", description: "How I keep it there", rating: 7 },
+          ],
+        })
+      ).text,
+    );
+    expect(fromCodex.saved.map((i: { title: string }) => i.title)).toEqual([
+      "A support inbox at zero",
+    ]);
+    expect(fromCodex.skipped[0]).toMatchObject({
+      title: "building in public — week 1!",
+      reason: "too close to “Building in public, week 1”",
+    });
+
+    const listed = JSON.parse((await tool("get_ideas")).text);
+    expect(listed).toMatchObject({ total: 3, published: 0, matching: 3 });
+    expect(listed.ideas.map((i: { title: string }) => i.title)).toEqual([
+      "A support inbox at zero",
+      "Building in public, week 1",
+      "Why I price by seat",
+    ]);
+    const [inbox, building, pricing] = listed.ideas;
+    expect(inbox).toMatchObject({
+      source: "codex",
+      claude_rating: null,
+      codex_rating: 7,
+      my_rating: null,
+      published: false,
+      details: null,
+    });
+    expect(building).toMatchObject({
+      source: "claude",
+      claude_rating: 8,
+      codex_rating: null,
+      details: "Thread of 4 posts; screenshots",
+      added_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+
+    const rated = await tool("rate_idea", { idea_id: pricing.idea_id, rating: 9 });
+    expect(rated.isError).toBe(false);
+    expect(JSON.parse(rated.text)).toMatchObject({
+      rated: true,
+      idea: { idea_id: pricing.idea_id, claude_rating: 6, codex_rating: 9 },
+    });
+
+    const byCodex = JSON.parse((await tool("get_ideas", { sort: "codex", limit: 2 })).text);
+    expect(byCodex.matching).toBe(3);
+    expect(byCodex.ideas.map((i: { idea_id: string }) => i.idea_id)).toEqual([
+      pricing.idea_id,
+      inbox.idea_id,
+    ]);
+
+    const { setIdeaPublished } = await import("@/lib/ideas/ideas");
+    await setIdeaPublished(userId, building.idea_id, true);
+    const unpublished = JSON.parse((await tool("get_ideas", { published: false })).text);
+    expect(unpublished).toMatchObject({ total: 3, published: 1, matching: 2 });
+    const done = JSON.parse((await tool("get_ideas", { published: true })).text);
+    expect(done.ideas.map((i: { idea_id: string }) => i.idea_id)).toEqual([building.idea_id]);
+
+    expect(await tool("rate_idea", { idea_id: "nope", rating: 5 })).toEqual({
+      isError: true,
+      text: "There is no idea with id nope.",
+    });
+    for (const rating of [0, 11, 7.5]) {
+      const bad = await call("tools/call", {
+        name: "rate_idea",
+        arguments: { idea_id: pricing.idea_id, rating },
+      });
+      expect(JSON.stringify(bad), String(rating)).toContain("isError");
+    }
+    const noRating = await call("tools/call", {
+      name: "save_ideas",
+      arguments: { ideas: [{ title: "No rating", description: "x" }] },
+    });
+    expect(JSON.stringify(noRating)).toContain("isError");
+    const badSource = await call("tools/call", {
+      name: "save_ideas",
+      arguments: { source: "gpt", ideas: [{ title: "x", description: "x", rating: 5 }] },
+    });
+    expect(JSON.stringify(badSource)).toContain("isError");
+    // None of the refused calls changed anything.
+    const after = JSON.parse((await tool("get_ideas")).text);
+    expect(after.total).toBe(3);
+    expect(
+      after.ideas.find((i: { idea_id: string }) => i.idea_id === pricing.idea_id),
+    ).toMatchObject({ codex_rating: 9 });
   });
 });

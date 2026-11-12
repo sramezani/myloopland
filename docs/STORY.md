@@ -2,6 +2,56 @@
 
 A dated log per session, newest first: what was done, what was learned, problems, what's next. Written for future Claude sessions.
 
+## 12 Nov 2026: the Ideas tab
+
+Siamak asked for an Ideas tab: post ideas that Claude (and Codex, through the same connector) suggests and rates from 1 to 10, which he rates too and ticks once published. Claude reads the list before suggesting more, so nothing repeats. One question before building: the spec had `claude_rating` required, but Codex can add ideas too. Siamak chose "the rating goes to the saver", so `claude_rating` is nullable.
+
+**Done**
+
+- **Spec first:** section 13 of `docs/SPEC.md`, plus sections 1, 2, 3, 4 and 8; decisions logged ("Ideas"); principle 1 in `CLAUDE.md` now lists the two new page inputs.
+- **Table `idea`** (`drizzle/0002_ideas.sql`): title, description, details, the three ratings (nullable, with a check constraint for 1 to 10), published, source, timestamps. Up to 1,000 per user.
+- **Data** (`src/lib/ideas/`):
+  - `summary.ts` (pure, used by the page too): `IdeaItem`, `isRating`, `sortIdeas`. Newest first by default, or a rating, highest first; unrated always last; ties newest first.
+  - `similar.ts`: near-duplicate titles. 80% of the words the same, after dropping case, punctuation, small words and plural "s". A typo counts as the same word in words of 5 letters or more; numbers and shorter words must match exactly ("first 100 followers" and "first 1000 followers" are two ideas).
+  - `ideas.ts`: `listIdeas`, `saveIdeas` (the rating goes in the saver's column; skipped ideas are named with the one they match), `rateIdea`, `setMyRating`, `setIdeaPublished`, `countIdeas`. Ideas saved in one call are a millisecond apart, so newest first keeps the order Claude sent them in.
+- **MCP:** `get_ideas(published?, sort?, limit?)`, `save_ideas(source?, ideas[])`, `rate_idea(idea_id, rating)`. The server instructions name them, and the chat routine has "give me post ideas" (get_ideas first), "rate the ideas" (Codex) and "which ideas should I write next?".
+- **Page** (`/dashboard/ideas`, tabs now Calendar, Ideas, Backlinks):
+  - `IdeaTable` (client): the rating headings cycle highest first, lowest first, newest first. The card title names the order, and `aria-sort` and a live message follow it.
+  - My rating (a native select, "—" clears it) and the published tick save at once and roll back with a message if saving fails. Rows keep their place while rating; the order changes only on a heading click.
+  - One `<table>` with explicit roles. Below 640 px the rows become blocks with small labels, and the headings become sort buttons in a row.
+  - `AskForIdeas`: lines to copy, labelled "In Claude" and "In Codex"; it is also the empty state.
+- **Reuse:** shadcn's `native-select` came in with the CLI. The new registry imports `cn` from a separate `cn` package and added it to `package.json`. I put `package.json` and the lockfile back and pointed the part at `@/lib/utils`, so there's no new dependency. It also has an `lg` size (36 px, 44 px for touch).
+- **Seed:** `npm run db:seed` adds 6 sample ideas (one from Codex, two published).
+- **Other docs:** README, `docs/mcp.md` (tools, chat routine, a Codex note), the privacy page and the delete-account text.
+- **Tests:** `similar.test.ts`, `summary.test.ts`, `src/app/actions/ideas.test.ts` (the two server actions, with the session and data layer mocked), `routines.test.ts`, a database test for the data layer (scoping to the user and the check constraint included), and the MCP test (18 tools; save, skip, list, filter, sort, rate, errors). `npm run check` passes; with `TEST_DATABASE_URL`, all 134 tests pass.
+- **Fixed a flaky test** (older than this session, Siamak's OK): `data.db.test.ts` adds the same website twice at once and expected the first address to win, but in about 2 runs in 9 the `www.` one won. It now checks the key and accepts either address. 12 runs in a row passed after.
+- **Checked in the browser** with a local test session and the seed:
+  - the empty state, sorting by each heading, rating, ticking, and the rollback message (an idea deleted behind the page's back);
+  - the keyboard: headings with Enter, the tick with Space;
+  - 375 px (no sideways scroll; the sort buttons fit one row) and 1440 px; no console or server errors.
+
+**Learned**
+
+- `npx shadcn add` now writes `import { cn } from "cn"` and installs that package. Check `package.json` after every shadcn add.
+- `useOptimistic` plus a frozen order (ids saved when a heading is clicked) keeps a just-rated row from jumping away when the table is sorted by that rating.
+- Ideas inserted in one statement share `now()`, so "newest first" was random within a batch until each got its own `created_at`.
+
+**Problems / not done**
+
+- Nothing committed; Siamak handles git.
+- Not tried with a live Claude or Codex; the tools were tested over the real MCP handler. Codex in production needs Client ID Metadata Document support, because open registration is only on in development (`src/lib/auth/auth.ts`). If Codex can't do that, it's Siamak's call whether to open registration.
+- On a brand-new test database, the two `*.db.test.ts` files still race to migrate on the first run (known since 31 Oct).
+
+**Ideas (not built)**
+
+- A filter on the page (unpublished only), if the list grows long.
+- Let Claude rate ideas Codex added (`rate_idea` with a `rater`), so both columns fill in.
+- Link a published idea to its post on the calendar.
+
+**Next**
+
+- After the deploy: "give me 10 post ideas" in Claude, then try connecting Codex and "rate the ideas".
+
 ## 6 Nov 2026: one backlinks list per website
 
 Siamak pointed out that backlinks belong to a domain, so the list should be per website: a dropdown at the top shows the open website, the first visit asks for a website instead of showing every place, and "Add website" at the end of the dropdown opens a small dialog. No removing for now.

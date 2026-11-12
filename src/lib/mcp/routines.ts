@@ -8,7 +8,7 @@ export const ROUTINE_MODES = ["setup", "daily", "morning", "evening", "weekly", 
 export type RoutineMode = (typeof ROUTINE_MODES)[number];
 
 /** The server instructions every MCP client receives. Kept short (Claude Code reads 4,096 characters). */
-export const SERVER_INSTRUCTIONS = `myloopland keeps this user's X (Twitter) growth plan and results: the playbook, the calendar of planned slots, drafts, posts with their numbers, notes, weekly reviews and decisions. You (Claude) do the work; myloopland stores it so every later session can learn from it. The user sees it all on a read-only dashboard and posts by hand. It also keeps, for each of the user's websites, a list of places to submit it to, for backlinks: get_backlinks and save_backlinks.
+export const SERVER_INSTRUCTIONS = `myloopland keeps this user's X (Twitter) growth plan and results: the playbook, the calendar of planned slots, drafts, posts with their numbers, notes, weekly reviews and decisions. You (Claude) do the work; myloopland stores it so every later session can learn from it. The user sees it all on a read-only dashboard and posts by hand. It also keeps, for each of the user's websites, a list of places to submit it to, for backlinks: get_backlinks and save_backlinks. And a list of post ideas, rated 1 to 10 by Claude, Codex and the user: get_ideas (read it before suggesting ideas, so none repeats), save_ideas and rate_idea (Codex's rating).
 
 Start every session with get_briefing, choosing the mode that fits: setup (first time), daily (the one scheduled run each morning: yesterday's numbers, the weekly review when it's due, today's drafts), morning (today's drafts only), evening (what was posted and its numbers), weekly (review and improve the plan) or chat (anything else). It returns the user's state and the steps to follow.
 
@@ -148,7 +148,10 @@ const routines: Record<RoutineMode, (ctx: RoutineContext) => string> = {
 - "you pick each day's topic": update_playbook, keeping the times and pillars and setting each topic to "Claude's pick". The drafts step then chooses it each day.
 - "write my week ahead": update_playbook, replacing the rule about writing drafts on the day with "Write the next 7 days' drafts after each weekly review, so I can schedule them on X myself. News and takes are still written on the day." Then write them now for the next 7 days' slots, leaving out news and takes. Never schedule anything on X yourself.
 - "how am I doing?": answer from get_briefing (progress and results), or get_stats for more.
-- "I submitted simpledash.com to SaaSHub": get_backlinks for that website to find the place's id, then save_backlinks with update submitted: true. "Find new backlink places": follow the steps get_backlinks returns.`,
+- "I submitted simpledash.com to SaaSHub": get_backlinks for that website to find the place's id, then save_backlinks with update submitted: true. "Find new backlink places": follow the steps get_backlinks returns.
+- "give me post ideas" (or "10 ideas about pricing"): get_ideas first, so you don't repeat old ones or ones the user rated low. Then save_ideas with each idea's title, a one-line description, details (the angle and format) and your rating from 1 to 10, kept to the user's pillars, notes, real events and public news. Reply with the titles, best first; they're on the Ideas page, where the user rates them and ticks the ones they published.
+- "rate the ideas" when you are Codex: get_ideas, then rate_idea for each idea without a codex_rating. Ideas you add yourself go in save_ideas with source codex.
+- "which ideas should I write next?": get_ideas with published false, sorted by my (then claude), and offer drafts for the best ones.`,
 };
 
 /**

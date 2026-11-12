@@ -1,5 +1,6 @@
 // Sample data for development (docs/SPEC.md section 11): two weeks of posts with numbers,
-// today's question and drafts, notes, a review and follower counts, for one existing user.
+// today's question and drafts, notes, a review, follower counts and post ideas, for one
+// existing user.
 //
 //   npm run db:seed -- you@example.com
 //
@@ -73,6 +74,7 @@ try {
     await tx`delete from note where user_id = ${user.id}`;
     await tx`delete from review where user_id = ${user.id}`;
     await tx`delete from decision where user_id = ${user.id}`;
+    await tx`delete from idea where user_id = ${user.id}`;
 
     // Followers: one reading a day for 30 days, slowly growing.
     for (let i = 30; i >= 0; i--) {
@@ -149,6 +151,21 @@ try {
               ${sql.json(["Building: 120 median views over 6 posts", "19:00 posts: 60 median views vs 95 at 12:30"])})`;
     await tx`insert into decision (id, user_id, review_id, change, reason) values
       (${id()}, ${user.id}, ${reviewId}, 'Move the evening slot to 18:00', '19:00 posts got 37% fewer views')`;
+
+    // Post ideas: Claude's and Codex's, some rated by the user, one published. Null is "—".
+    const ideas = [
+      ["The week the sign-in broke", "What went wrong, how I found it, and the fix", "Story post with one screenshot of the error", 8, 7, 9, true, "claude", 9],
+      ["Pricing by seat or by usage", "Why I picked seats for a small B2B tool", "Thread, 5 posts; the maths in post 3", 7, null, null, false, "claude", 6],
+      ["My first paying user", "How they found me and what they asked first", null, 9, 8, null, false, "claude", 4],
+      ["A support inbox at zero", "The two rules that keep it there", "Short post, a list of 2", null, 6, 4, false, "codex", 3],
+      ["What I cut from v1", "Three features I almost built, and why they waited", "Thread; end with a question", 6, null, null, false, "claude", 1],
+      ["Building in public, month one", "Followers, posts and what I'd do again", "Numbers from the dashboard only", 7, 9, null, false, "claude", 0],
+    ];
+    for (const [title, description, details, claude, codex, mine, published, source, daysAgo] of ideas) {
+      await tx`insert into idea (id, user_id, created_at, title, description, details, claude_rating, codex_rating, my_rating, published, source)
+        values (${id()}, ${user.id}, ${new Date(Date.now() - daysAgo * 86_400_000)}, ${title}, ${description}, ${details},
+                ${claude}, ${codex}, ${mine}, ${published}, ${source})`;
+    }
   });
   console.log(`seed: sample data for ${email} (@${handle}, ${tz}) is in. Open the dashboard.`);
 } catch (error) {

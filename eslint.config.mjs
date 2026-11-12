@@ -60,7 +60,7 @@ const layer = (files, allowed, message) => ({
     ],
   },
 });
-const featureFolders = ["account", "backlinks", "calendar", "onboarding", "plan"];
+const featureFolders = ["account", "backlinks", "calendar", "ideas", "onboarding", "plan"];
 
 export default defineConfig([
   ...nextVitals,

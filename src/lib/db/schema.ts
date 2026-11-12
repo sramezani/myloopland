@@ -3,9 +3,10 @@
  * user_id foreign key cascades on delete, so deleting a user deletes all their data.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -394,6 +395,7 @@ export const DECISION_STATUSES = ["pending", "approved", "skipped"] as const;
 export const BACKLINK_CATEGORIES = ["launch", "directory", "community"] as const;
 export const LINK_TYPES = ["dofollow", "nofollow"] as const;
 export const BACKLINK_SOURCES = ["starter", "claude"] as const;
+export const IDEA_SOURCES = ["claude", "codex"] as const;
 
 export type PostStatus = (typeof POST_STATUSES)[number];
 export type PostKind = (typeof POST_KINDS)[number];
@@ -402,6 +404,7 @@ export type DecisionStatus = (typeof DECISION_STATUSES)[number];
 export type BacklinkCategory = (typeof BACKLINK_CATEGORIES)[number];
 export type LinkType = (typeof LINK_TYPES)[number];
 export type BacklinkSource = (typeof BACKLINK_SOURCES)[number];
+export type IdeaSource = (typeof IDEA_SOURCES)[number];
 
 /** One user's playbook versions. The newest one is active; older ones are history. */
 export const playbook = pgTable(
@@ -631,6 +634,42 @@ export const backlink = pgTable(
   (table) => [uniqueIndex("backlink_website_id_url_key_idx").on(table.websiteId, table.urlKey)],
 );
 
+/**
+ * A post idea that Claude or Codex suggested (docs/SPEC.md section 13). Each rating is 1 to 10,
+ * or null until that one rates it: never 0. The user sets their own rating and `published`.
+ */
+export const idea = pgTable(
+  "idea",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    /** Free text: the angle, the format, notes. */
+    details: text("details"),
+    claudeRating: integer("claude_rating"),
+    codexRating: integer("codex_rating"),
+    myRating: integer("my_rating"),
+    published: boolean("published").default(false).notNull(),
+    /** Who saved it; its rating went into that one's column. */
+    source: text("source", { enum: IDEA_SOURCES }).notNull(),
+  },
+  (table) => [
+    index("idea_user_id_created_at_idx").on(table.userId, table.createdAt),
+    check(
+      "idea_ratings_check",
+      sql`${table.claudeRating} between 1 and 10 and ${table.codexRating} between 1 and 10 and ${table.myRating} between 1 and 10`,
+    ),
+  ],
+);
+
 export const postRelations = relations(post, ({ one, many }) => ({
   user: one(user, { fields: [post.userId], references: [user.id] }),
   drafts: many(draft),
@@ -656,3 +695,4 @@ export type Review = typeof review.$inferSelect;
 export type Decision = typeof decision.$inferSelect;
 export type Website = typeof website.$inferSelect;
 export type Backlink = typeof backlink.$inferSelect;
+export type Idea = typeof idea.$inferSelect;

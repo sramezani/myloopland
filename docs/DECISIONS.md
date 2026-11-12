@@ -93,6 +93,22 @@ Each technical decision and each dependency, with a one-line reason. Newest at t
 | `get_backlinks` drops the playbook's `about`; the routine opens the website instead | The website says what the product is better than the X playbook does |
 | `OneFieldForm` in `components/shared`, used by the X profile form and the website form | Reuse first: the same one-field form, label, error and kept value |
 
+## Ideas (12 Nov 2026)
+
+| Decision | Why |
+| --- | --- |
+| An Ideas tab with an `idea` table, three MCP tools and two page inputs (Siamak) | Siamak asked for it: post ideas rated by Claude, Codex and him, so the best get written and none is suggested twice. It widens principle 1's inputs, by his request |
+| The saver's rating goes in its own column; `claude_rating` is nullable (Siamak) | Codex can add ideas too. An idea Codex adds has no Claude rating, so the column can't require one |
+| `rate_idea` sets only `codex_rating`, one idea per call (Siamak's spec) | What was asked; Claude's rating comes with `save_ideas` |
+| Ratings are whole numbers 1 to 10 or null, with a check constraint | Unknown is null, never 0, and a bad write can't slip past the tools |
+| Near-duplicates are found in code (`src/lib/ideas/similar.ts`): 80% of the words the same after cleaning, a typo in a word of 5 letters or more counting as the same; numbers exact | No extension (such as `pg_trgm`) and no new dependency; a safety net under `get_ideas`, which Claude reads first |
+| One `sortIdeas` for the page and the tools; unrated last whatever the direction | The same order everywhere, and "—" never sorts as 0 |
+| The page sorts in the browser; rows keep their place while the user rates | Instant sorting without a round trip, and a row doesn't jump away under the pointer |
+| One `<table>` for every width, restyled into blocks below 640 px, with explicit table roles | One set of controls (no duplicate ids or handlers), and screen readers still get a table after the display change |
+| My rating is a native `<select>` (—, 1 to 10) | The phone's own picker, keyboard-friendly, and "—" clears the rating |
+| Up to 1,000 ideas per user, 25 per `save_ideas` call; `get_ideas` returns up to 500 (default 100) | Keeps writes and tool results small (Claude Code reads 25,000 tokens) |
+| Tabs: Calendar, Ideas, Backlinks | Ideas are about posts, so they sit next to the calendar |
+
 ## Dependencies
 
 | Package | Why |

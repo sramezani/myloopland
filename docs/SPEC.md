@@ -4,7 +4,7 @@ How myloopland is built. The "what and why" is `docs/BRIEF.md`; Claude's side (c
 
 ## 1. In one paragraph
 
-A Next.js app with Google sign-in and three inputs: the X profile, the user's websites, and a tick on each backlink place the user has submitted to. It serves a read-only calendar, a backlinks list and an MCP endpoint at `/mcp`. The user's Claude connects to `/mcp` through OAuth (the same Google sign-in), then plans, drafts, records posts and numbers, reviews the week and finds new backlink places through 15 tools. Postgres keeps everything. One server, Docker Compose, Caddy, Cloudflare.
+A Next.js app with Google sign-in and a few inputs: the X profile, the user's websites, a tick on each backlink place the user has submitted to, and the user's own rating and a published tick on each post idea. It serves a read-only calendar, an ideas table, a backlinks list and an MCP endpoint at `/mcp`. The user's Claude connects to `/mcp` through OAuth (the same Google sign-in), then plans, drafts, records posts and numbers, reviews the week, suggests and rates post ideas and finds new backlink places through 18 tools. Postgres keeps everything. One server, Docker Compose, Caddy, Cloudflare.
 
 ## 2. Architecture
 
@@ -19,13 +19,14 @@ myloopland: Next.js, one container
    ├─ /consent              the user allows Claude to connect
    ├─ /dashboard            read-only calendar (server components)
    ├─ /dashboard/plan       the active playbook, read-only
+   ├─ /dashboard/ideas      post ideas with Claude's, Codex's and the user's ratings (section 13)
    ├─ /dashboard/backlinks  one list per website of places to submit it to, with a tick for each (section 12)
    └─ src/lib/*             one data layer, used by both MCP tools and pages
    ▼
 Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
 ```
 
-- **Writes** come only from Claude, through the MCP tools, plus the X profile form, adding a website, the backlink ticks and "Delete account".
+- **Writes** come only from Claude, through the MCP tools, plus the X profile form, adding a website, the backlink ticks, the user's idea ratings and published ticks, and "Delete account".
 - **The server never calls X.** Claude reads X in the user's own browser and sends the numbers.
 - **No jobs** run on the server except the nightly backup and cleanup. Claude's routines are scheduled in each user's own Claude.
 
@@ -36,8 +37,8 @@ Postgres 17 container ── nightly backup to Cloudflare R2 (optional)
 | `src/config/theme.ts` | Colours, radius, shadows, brand facts (plain data) |
 | `src/components/ui` | shadcn parts |
 | `src/components/shared` | Reusable blocks that take props and fetch nothing: `CardShell`, `CopyButton`, `Copyable`, `StatusBadge`, `Metric`, `SegmentedLinks`, `RangeNav`, `Notice`, `EmptyState`, `Logo`, `GoogleButton`, `Container` |
-| `src/components/{account,backlinks,calendar,onboarding,plan}` | Feature components |
-| `src/lib` | Data access and helpers: `db`, `auth`, `playbook`, `calendar`, `posts`, `notes`, `reviews`, `stats`, `progress`, `profile`, `account`, `backlinks`, `mcp`, `x`, `dates`, `format` |
+| `src/components/{account,backlinks,calendar,ideas,onboarding,plan}` | Feature components |
+| `src/lib` | Data access and helpers: `db`, `auth`, `playbook`, `calendar`, `posts`, `notes`, `reviews`, `stats`, `progress`, `profile`, `account`, `backlinks`, `ideas`, `mcp`, `x`, `dates`, `format` |
 | `src/app` | Routes, pages and server actions |
 
 Layers: `src/config` → `components/ui` → `components/shared` → feature folders → `src/app`. Each imports only from its own folder and the layers before; `src/lib` imports only `config` and `lib`. ESLint enforces it, and bans relative `../` imports. All formatting of numbers and days goes through `src/lib/format.ts`.
@@ -60,6 +61,7 @@ One file, `src/lib/db/schema.ts`. Singular table names; camelCase keys with snak
 | `decision` | A suggested playbook change: pending, approved (with the playbook version) or skipped |
 | `website` | A website the user collects backlinks for (section 12): url, `url_key`. Unique (user_id, url_key) |
 | `backlink` | A place to submit one website to (section 12): website_id, name, url, `url_key`, category, cost, note, link type, position, who added it, `submitted_at`. Unique (website_id, url_key) |
+| `idea` | A post idea (section 13): title, description, details, `claude_rating`, `codex_rating`, `my_rating` (each 1 to 10 or null), `published`, `source` (claude or codex) |
 
 Migrations live in `drizzle/` and run when the container starts (`scripts/migrate.mjs`).
 
@@ -106,8 +108,9 @@ Migrations live in `drizzle/` and run when the container starts (`scripts/migrat
   - `/consent`.
   - `/dashboard`: the X profile form until there is one, then the progress line with a "Your plan" link, "Connect your Claude" until it is connected, the followers chart (once there are readings on two days), and the calendar.
   - `/dashboard/plan`: the active playbook, read-only (section 5). Also in the menu.
+  - `/dashboard/ideas`: post ideas in a table with three ratings and a published tick (section 13).
   - `/dashboard/backlinks`: a website picker and that website's places to submit it to, with a tick for each (section 12).
-- **Top bar:** the logo, two tabs (Calendar, which also holds the plan page, and Backlinks) and the account menu. Below 640 px the tabs move to a second row under the logo. Before the X profile is added there are no tabs, so the first screen has one job.
+- **Top bar:** the logo, three tabs (Calendar, which also holds the plan page, Ideas and Backlinks) and the account menu. Below 640 px the tabs move to a second row under the logo. Before the X profile is added there are no tabs, so the first screen has one job.
   - `/privacy`.
 - **The look** follows the "X growth dashboard" mockup: warm stone, orange accent (`#C2410C`), Inter. All values live in `src/config/theme.ts`. A test checks WCAG AA contrast for every pair listed there.
 - **Status words and chips** (`StatusBadge`):
@@ -151,7 +154,7 @@ On the server, `POSTGRES_PASSWORD` and the optional `R2_*` values are also used 
 ## 11. Development
 
 - **Database:** `docker compose up -d db` (port 5433), or any local Postgres. Then `npm run db:migrate`, then `npm run dev`.
-- **Sample data:** `npm run db:seed -- you@example.com`, after you sign in and add your X profile. It runs on local databases only.
+- **Sample data** (posts, numbers, notes, a review, followers and post ideas): `npm run db:seed -- you@example.com`, after you sign in and add your X profile. It runs on local databases only.
 - **Tests:**
   - `npm run check` runs typecheck, lint and unit tests.
   - With `TEST_DATABASE_URL` pointing at an empty database, the `*.db.test.ts` files also test the data layer and the MCP server end to end.
@@ -187,3 +190,28 @@ For each of the user's websites, a list of places to submit it to, for links bac
   - `save_backlinks(website?, add, update)` adds places to that website's list and changes its places by id: cost, note, link type or submitted. A new place whose address is already on the list is reported back, not added.
   - The prompt "Find new backlink places" runs the routine.
   - Claude never submits, signs up or posts for the user. It may tick a place when the user says they submitted it.
+
+## 13. Ideas
+
+Post ideas that Claude (or Codex, connected to the same MCP server) suggests and rates, and the user rates too, so the best ones get written and nothing is suggested twice (Siamak, 12 Nov 2026).
+
+- **The table `idea`:**
+  - `title` (up to 200 characters), `description` (up to 1,000) and `details` (optional free text: the angle, the format, notes; up to 4,000).
+  - `claude_rating`, `codex_rating` and `my_rating`: whole numbers from 1 to 10, or null when not rated yet. A check constraint keeps them in range. Never 0.
+  - `published` (false until the user ticks it) and `source`: claude or codex, whoever saved it.
+  - `created_at` and `updated_at`. Up to 1,000 ideas per user.
+- **Who rates what:** the saver's rating goes in its own column: an idea Claude saves has `claude_rating`, one Codex saves has `codex_rating` (Siamak, 12 Nov 2026). Codex rates other ideas with `rate_idea`. Only the user sets `my_rating` and `published`, on the page.
+- **Near-duplicates** (`src/lib/ideas/similar.ts`): a new title is skipped when it matches a listed one, or one earlier in the same call, after ignoring case, punctuation, word order, small words ("a", "the", "my") and plural "s". It is also skipped when at least 80% of all the words in both are the same, where a word with a typo counts as the same: one letter off in words of 5 letters or more, two in words of 9 or more. Shorter words and numbers must match exactly, so "first 100 followers" and "first 1000 followers" are two ideas. Skipped ideas are named in the answer with the idea they match. Claude also reads `get_ideas` first, which catches the same idea in other words.
+- **Sorting** (`sortIdeas`, `src/lib/ideas/summary.ts`, used by the page and the tools): newest first by default, or by one rating, highest first. Unrated ideas always go last, and ties go newest first.
+- **MCP** (`docs/mcp.md`):
+  - `save_ideas(source?, ideas[])`: up to 25 at a time, each with a title, description, optional details and the saver's rating. `source` is claude unless Codex says codex.
+  - `get_ideas(published?, sort?, limit?)`: the list, filtered to published or unpublished ideas, sorted by created, claude, codex or my, up to 500 (default 100), with the counts. Claude calls it before suggesting new ideas.
+  - `rate_idea(idea_id, rating)`: sets `codex_rating`. Rating again replaces it.
+  - The chat routine says when to use each one.
+- **The page** (`/dashboard/ideas`, server component; `IdeaTable` is the client part):
+  - The title, a line about what the page is, and the table. With no ideas yet, an empty state and lines to say to Claude.
+  - A table: the idea (title, description, and the details behind a "Details" toggle), Claude's, Codex's and the user's rating, and a published tick. An idea Codex added has a small "Codex" label. Unset ratings show "—".
+  - The Claude, Codex and My rating headings sort the table: highest first, then lowest first, then back to newest first. The card's title says the order.
+  - My rating (a select: —, 1 to 10) and the published tick save as soon as they change, and go back with a message if saving fails. Rows keep their place while the user rates, so nothing jumps away; the order updates when a heading is clicked. Nothing else on the page is editable, and nobody adds ideas by hand.
+  - Below 640 px each idea is a block: the title and description, then the three ratings and the tick in a row with small labels, and the sort headings become buttons above the list. The roles stay those of a table.
+- **Writes:** my rating and the published tick are server actions (`requireUser()`, the id checked against the user).

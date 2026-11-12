@@ -1,4 +1,4 @@
-import { CalendarDaysIcon, LinkIcon } from "lucide-react";
+import { CalendarDaysIcon, LightbulbIcon, LinkIcon } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -6,10 +6,11 @@ import { Container } from "@/components/shared/container";
 import { Logo } from "@/components/shared/logo";
 import { cn } from "@/lib/utils";
 
-export type Section = "calendar" | "backlinks";
+export type Section = "calendar" | "ideas" | "backlinks";
 
 const SECTIONS: { key: Section; href: Route; label: string; Icon: typeof LinkIcon }[] = [
   { key: "calendar", href: "/dashboard", label: "Calendar", Icon: CalendarDaysIcon },
+  { key: "ideas", href: "/dashboard/ideas", label: "Ideas", Icon: LightbulbIcon },
   { key: "backlinks", href: "/dashboard/backlinks", label: "Backlinks", Icon: LinkIcon },
 ];
 

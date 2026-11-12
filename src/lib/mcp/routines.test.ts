@@ -30,6 +30,14 @@ describe("routineFor", () => {
     expect(daily).toContain("@siaramzee");
   });
 
+  it("has chat read the ideas before saving new ones, and Codex rate them", () => {
+    const chat = routineFor("chat", ctx);
+    expect(chat.indexOf("get_ideas first")).toBeGreaterThan(-1);
+    expect(chat.indexOf("get_ideas first")).toBeLessThan(chat.indexOf("save_ideas"));
+    expect(chat).toContain("rate_idea");
+    expect(chat).toContain("source codex");
+  });
+
   it("names the handle placeholder before the user has one", () => {
     expect(routineFor("evening", { handle: null })).toContain("@<handle>");
   });
@@ -48,5 +56,11 @@ describe("BACKLINK_ROUTINE", () => {
 describe("SERVER_INSTRUCTIONS", () => {
   it("fits in what Claude Code reads", () => {
     expect(SERVER_INSTRUCTIONS.length).toBeLessThan(4096);
+  });
+
+  it("names every ideas tool", () => {
+    for (const name of ["get_ideas", "save_ideas", "rate_idea"]) {
+      expect(SERVER_INSTRUCTIONS).toContain(name);
+    }
   });
 });

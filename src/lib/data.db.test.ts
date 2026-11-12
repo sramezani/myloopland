@@ -200,7 +200,9 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
       addWebsite(userId, "https://www.simpledash.com/"),
     ]);
     expect(again.id).toBe(site.id);
-    expect(site).toMatchObject({ url: "https://simpledash.com", key: "simpledash.com" });
+    // Whichever add wins the race keeps its own spelling: both are the same website.
+    expect(site.key).toBe("simpledash.com");
+    expect(["https://simpledash.com", "https://www.simpledash.com"]).toContain(site.url);
     expect(await findWebsite(userId)).toEqual(site);
 
     const first = await listBacklinks(userId, site.id);
@@ -276,15 +278,149 @@ describe.skipIf(!url)("data layer (Postgres)", () => {
     }
   });
 
+  it("keeps ideas with each saver's rating, skips near-duplicates and takes the user's ratings", async () => {
+    const { countIdeas, listIdeas, rateIdea, saveIdeas, setIdeaPublished, setMyRating } =
+      await import("@/lib/ideas/ideas");
+    const { db } = await import("@/lib/db/client");
+    const { idea, user } = await import("@/lib/db/schema");
+
+    expect(await listIdeas(userId)).toEqual([]);
+    const first = await saveIdeas(userId, "claude", [
+      { title: "Building in public", description: "What a week of it looks like", rating: 8 },
+      {
+        title: "Pricing my first SaaS",
+        description: "How I picked the price",
+        details: "Thread, 5 posts",
+        rating: 6,
+      },
+      // Nearly the same as the first one in this call.
+      { title: "Bulding in public!", description: "Again", rating: 9 },
+    ]);
+    expect(first.saved.map((each) => each.title)).toEqual([
+      "Building in public",
+      "Pricing my first SaaS",
+    ]);
+    expect(first.skipped).toEqual([
+      {
+        title: "Bulding in public!",
+        reason: "too close to “Building in public”",
+        idea_id: first.saved[0]!.id,
+      },
+    ]);
+    expect(first.total).toBe(2);
+
+    const fromCodex = await saveIdeas(userId, "codex", [
+      { title: "Public building", description: "Same idea, other words order", rating: 5 },
+      { title: "A week without Slack", description: "What changed", rating: 7 },
+    ]);
+    expect(fromCodex.saved.map((each) => each.title)).toEqual(["A week without Slack"]);
+    expect(fromCodex.skipped[0]!.idea_id).toBe(first.saved[0]!.id);
+
+    // Newest call first; within a call, the order it was sent in.
+    const ideas = await listIdeas(userId);
+    expect(ideas.map((each) => each.title)).toEqual([
+      "A week without Slack",
+      "Building in public",
+      "Pricing my first SaaS",
+    ]);
+    const [slack, building, pricing] = ideas as [
+      (typeof ideas)[number],
+      (typeof ideas)[number],
+      (typeof ideas)[number],
+    ];
+    expect(slack).toMatchObject({
+      source: "codex",
+      claudeRating: null,
+      codexRating: 7,
+      myRating: null,
+      published: false,
+      details: null,
+    });
+    expect(pricing).toMatchObject({
+      source: "claude",
+      claudeRating: 6,
+      details: "Thread, 5 posts",
+    });
+    expect(await rateIdea(userId, pricing.id, 9)).toMatchObject({
+      codexRating: 9,
+      claudeRating: 6,
+    });
+    await rateIdea(userId, pricing.id, 4);
+    await setMyRating(userId, building.id, 10);
+    await setMyRating(userId, slack.id, 3);
+    await setMyRating(userId, slack.id, null);
+    await setIdeaPublished(userId, building.id, true);
+
+    const ids = (list: { id: string }[]) => list.map((each) => each.id);
+    expect(ids(await listIdeas(userId, { sort: "codex" }))).toEqual([
+      slack.id,
+      pricing.id,
+      building.id,
+    ]);
+    expect(ids(await listIdeas(userId, { sort: "my" }))).toEqual([
+      building.id,
+      slack.id,
+      pricing.id,
+    ]);
+    expect(ids(await listIdeas(userId, { published: true }))).toEqual([building.id]);
+    expect(ids(await listIdeas(userId, { published: false }))).toEqual([slack.id, pricing.id]);
+    expect(await countIdeas(userId)).toEqual({ total: 3, published: 1 });
+    expect((await listIdeas(userId)).find((each) => each.id === slack.id)?.myRating).toBeNull();
+
+    // Ratings outside 1 to 10 never get in, not even past the data layer.
+    await expect(rateIdea(userId, pricing.id, 0)).rejects.toThrow("whole number from 1 to 10");
+    await expect(setMyRating(userId, pricing.id, 11)).rejects.toThrow("whole number from 1 to 10");
+    await expect(
+      saveIdeas(userId, "claude", [{ title: "Fresh one", description: "x", rating: 12 }]),
+    ).rejects.toThrow("whole number from 1 to 10");
+    await expect(
+      db.insert(idea).values({
+        id: crypto.randomUUID(),
+        userId,
+        title: "Zero",
+        description: "x",
+        claudeRating: 0,
+        source: "claude",
+      }),
+    ).rejects.toThrow();
+
+    // Another user can't see, rate or tick these ideas.
+    const otherId = `other-${crypto.randomUUID()}`;
+    await db.insert(user).values({ id: otherId, name: "Other", email: `${otherId}@example.com` });
+    try {
+      expect(await listIdeas(otherId)).toEqual([]);
+      await expect(rateIdea(otherId, pricing.id, 5)).rejects.toThrow("There is no idea with id");
+      await expect(setMyRating(otherId, pricing.id, 5)).rejects.toThrow("There is no idea");
+      await expect(setIdeaPublished(otherId, pricing.id, true)).rejects.toThrow("There is no idea");
+      // And the same title is fine on someone else's list.
+      expect(
+        (
+          await saveIdeas(otherId, "claude", [
+            { title: "Building in public", description: "Mine", rating: 5 },
+          ])
+        ).saved,
+      ).toHaveLength(1);
+    } finally {
+      const { deleteAccount } = await import("@/lib/account/account");
+      await deleteAccount(otherId);
+    }
+    expect((await listIdeas(userId)).find((each) => each.id === pricing.id)).toMatchObject({
+      codexRating: 4,
+      myRating: null,
+      published: false,
+    });
+  });
+
   it("deletes everything with the account", async () => {
     const { deleteAccount } = await import("@/lib/account/account");
     const { db } = await import("@/lib/db/client");
-    const { backlink, post, playbook, website } = await import("@/lib/db/schema");
+    const { backlink, idea, post, playbook, website } = await import("@/lib/db/schema");
     const { eq } = await import("drizzle-orm");
     await deleteAccount(userId);
     expect(await db.select().from(post).where(eq(post.userId, userId))).toEqual([]);
     expect(await db.select().from(playbook).where(eq(playbook.userId, userId))).toEqual([]);
     expect(await db.select().from(backlink).where(eq(backlink.userId, userId))).toEqual([]);
     expect(await db.select().from(website).where(eq(website.userId, userId))).toEqual([]);
+    expect(await db.select().from(idea).where(eq(idea.userId, userId))).toEqual([]);
   });
 });

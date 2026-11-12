@@ -80,3 +80,11 @@ One version, ordered in sprints. Tick a task with the date when it's done (`npm 
 - [x] One list per website: `website` table, the migration regenerated, the starter list copied in when a website is added; database and MCP tests (6 Nov 2026)
 - [x] Website picker next to the title, "Add website" in a small dialog, and a page that only asks for a website until there is one; checked at 375 px and 1440 px and with the keyboard (6 Nov 2026)
 - [ ] Ask a real Claude to "find new backlink places for simpledash.com" after the deploy, and tune the routine text
+
+## S8. Ideas
+
+- [x] Spec (section 13), `idea` table and the `0002_ideas` migration, with a check that ratings are 1 to 10 (12 Nov 2026)
+- [x] Data layer: save with the saver's rating, skip near-duplicate titles, list with filter and sort, Codex's rating, the user's rating and published tick; database tests (12 Nov 2026)
+- [x] MCP: `get_ideas`, `save_ideas`, `rate_idea`, the chat routine and server instructions; tested over the real handler (12 Nov 2026)
+- [x] Ideas tab (`/dashboard/ideas`): sortable rating headings, my rating and published saving on change with rollback, "—" for unset ratings; server action tests; checked at 375 px and 1440 px and with the keyboard (12 Nov 2026)
+- [ ] After the deploy: ask a real Claude for post ideas, and connect Codex to rate them (needs Codex to support Client ID Metadata Documents, or a decision on open registration)

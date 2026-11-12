@@ -4,9 +4,17 @@ import { z } from "zod";
 import { findWebsite, listBacklinks, listWebsites, saveBacklinks } from "@/lib/backlinks/backlinks";
 import { countBacklinks } from "@/lib/backlinks/summary";
 import { getCalendar } from "@/lib/calendar/queries";
-import { BACKLINK_CATEGORIES, LINK_TYPES, NOTE_KINDS, POST_KINDS } from "@/lib/db/schema";
+import {
+  BACKLINK_CATEGORIES,
+  IDEA_SOURCES,
+  LINK_TYPES,
+  NOTE_KINDS,
+  POST_KINDS,
+} from "@/lib/db/schema";
 import { addDays, daysBetween, isClockTime, isIsoDay, isTimeZone, todayIn } from "@/lib/dates";
 import { UserFacingError } from "@/lib/errors";
+import { countIdeas, listIdeas, rateIdea, saveIdeas } from "@/lib/ideas/ideas";
+import { IDEA_SORTS, RATING_MAX, RATING_MIN, type IdeaItem } from "@/lib/ideas/summary";
 import { listNotes, saveNote } from "@/lib/notes/notes";
 import { listPlaybooks, savePlaybook } from "@/lib/playbook/playbook";
 import { playbookSchema } from "@/lib/playbook/schema";
@@ -78,6 +86,24 @@ const placeFields = {
     .optional()
     .describe("Only when the site says whether its links are followed"),
 };
+
+const oneToTen = z.number().int().min(RATING_MIN).max(RATING_MAX);
+
+/** An idea as Claude sees it: snake_case, the day it was added in the user's time zone. */
+function ideaForClaude(item: IdeaItem, timeZone: string) {
+  return {
+    idea_id: item.id,
+    title: item.title,
+    description: item.description,
+    details: item.details,
+    source: item.source,
+    claude_rating: item.claudeRating,
+    codex_rating: item.codexRating,
+    my_rating: item.myRating,
+    published: item.published,
+    added_on: todayIn(timeZone, new Date(item.createdAt)),
+  };
+}
 
 const READ = { readOnlyHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: false } as const;
@@ -550,6 +576,98 @@ export function registerTools(server: McpServer, userId: string) {
           update: update.map((p) => ({ ...p, linkType: p.link_type })),
         });
         return { website: site.url, ...saved };
+      }),
+  );
+
+  server.registerTool(
+    "get_ideas",
+    {
+      title: "Get ideas",
+      description:
+        "The user's post ideas, each with its title, description, details, who added it (claude or codex), Claude's, Codex's and the user's rating (1 to 10, null when not rated) and whether the user published it. Also how many there are and how many are published. Call it before suggesting new ideas, so you don't repeat old ones, and to see which ideas the user rated highest.",
+      inputSchema: z.object({
+        published: z
+          .boolean()
+          .optional()
+          .describe("true: only published ideas; false: only unpublished ones; leave out for all"),
+        sort: z
+          .enum(IDEA_SORTS)
+          .default("created")
+          .describe(
+            "created: newest first. claude, codex or my: that rating, highest first, with unrated ideas last",
+          ),
+        limit: z.number().int().min(1).max(500).default(100),
+      }),
+      annotations: READ,
+    },
+    ({ published, sort, limit }) =>
+      run(async () => {
+        const [{ timeZone }, ideas, counts] = await Promise.all([
+          me(),
+          listIdeas(userId, { published, sort }),
+          countIdeas(userId),
+        ]);
+        return {
+          total: counts.total,
+          published: counts.published,
+          matching: ideas.length,
+          ideas: ideas.slice(0, limit).map((each) => ideaForClaude(each, timeZone)),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "save_ideas",
+    {
+      title: "Save ideas",
+      description:
+        "Adds post ideas to the user's Ideas list, up to 25 at a time: each with a title, a short description, optional details (the angle, format, notes) and your rating from 1 to 10. `source` says who you are: claude (the default) or codex; the rating is saved as that one's rating. Call get_ideas first. An idea whose title is nearly the same as a listed one (or one earlier in this call) is skipped and named in the answer. Never invent numbers, users or events.",
+      inputSchema: z.object({
+        source: z
+          .enum(IDEA_SOURCES)
+          .default("claude")
+          .describe("Who is saving these ideas: claude or codex"),
+        ideas: z
+          .array(
+            z.object({
+              title: words(200),
+              description: words(1000).describe("What the post is about, in a sentence or two"),
+              details: z
+                .string()
+                .trim()
+                .max(4000)
+                .nullable()
+                .optional()
+                .describe("Free text: the angle, the format (post, thread, quote), notes"),
+              rating: oneToTen.describe(
+                "How good you think the idea is: 1 (weak) to 10 (excellent)",
+              ),
+            }),
+          )
+          .min(1)
+          .max(25),
+      }),
+      annotations: WRITE,
+    },
+    ({ source, ideas }) => run(() => saveIdeas(userId, source, ideas)),
+  );
+
+  server.registerTool(
+    "rate_idea",
+    {
+      title: "Rate idea",
+      description:
+        "Sets Codex's rating (1 to 10) on an idea already on the list, by its idea_id from get_ideas. Rating it again replaces the rating.",
+      inputSchema: z.object({
+        idea_id: id,
+        rating: oneToTen.describe("Codex's rating: 1 (weak) to 10 (excellent)"),
+      }),
+      annotations: { ...WRITE, idempotentHint: true },
+    },
+    ({ idea_id, rating }) =>
+      run(async () => {
+        const [{ timeZone }, rated] = await Promise.all([me(), rateIdea(userId, idea_id, rating)]);
+        return { rated: true, idea: ideaForClaude(rated, timeZone) };
       }),
   );
 }
