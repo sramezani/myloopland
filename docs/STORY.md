@@ -2,6 +2,19 @@
 
 A dated log per session, newest first: what was done, what was learned, problems, what's next. Written for future Claude sessions.
 
+## 17 Nov 2026: Next.js 16.4.6 (security update)
+
+`next dev` in dr-noodle warned about a known security vulnerability in Next.js 16.4.3 (the version here too), so the same upgrade was done here. No feature work.
+
+**Done**
+
+- `next` and `eslint-config-next` moved from 16.4.3 to 16.4.6, both still pinned exactly. Only Next's own packages changed in `package-lock.json`.
+- `npm run check` passes (17 test files, 121 tests; the database tests skip without `TEST_DATABASE_URL`) and `npm run build` passes. Not committed: Siamak handles git.
+
+**Learned**
+
+- `next dev` 16.4.6 writes an `AGENTS.md` into the repo and re-adds it on every start. Not checked here (the dev server was not started in this repo); expect it to appear. Disable with `agentRules: false` in `next.config.ts` or commit it.
+
 ## 12 Nov 2026: the Ideas tab
 
 Siamak asked for an Ideas tab: post ideas that Claude (and Codex, through the same connector) suggests and rates from 1 to 10, which he rates too and ticks once published. Claude reads the list before suggesting more, so nothing repeats. One question before building: the spec had `claude_rating` required, but Codex can add ideas too. Siamak chose "the rating goes to the saver", so `claude_rating` is nullable.
